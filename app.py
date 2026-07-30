@@ -973,6 +973,31 @@ def select_promotion_candidate(
     return [chosen, *remaining]
 
 
+def manual_correction_candidates(
+    board: chess.Board,
+    scores: dict[chess.Square, float],
+    rejected_move: chess.Move,
+    profile: BoardProfile,
+) -> list[RankedMove]:
+    """Rank alternatives manually while keeping the rejected move available."""
+    ranked = rank_legal_moves(
+        board,
+        profile.adjusted_scores(scores) if profile.learning_enabled else scores,
+        profile.learned_patterns() if profile.learning_enabled else None,
+        profile.learned_rejections() if profile.learning_enabled else None,
+    )
+    alternatives = [
+        candidate for candidate in ranked if candidate.move != rejected_move
+    ][:7]
+    rejected = next(
+        (candidate for candidate in ranked if candidate.move == rejected_move),
+        None,
+    )
+    if rejected is not None:
+        alternatives.append(rejected)
+    return alternatives
+
+
 def choose_promotion_piece() -> chess.PieceType:
     """Show a modal promotion chooser; Enter and window-close default to Queen."""
     window = "Choose promotion piece"
@@ -1993,6 +2018,12 @@ def main() -> None:
         game_result = "*"
         game_finished = False
         game_review: GameReview | None = None
+        last_auto_move: chess.Move | None = None
+        last_auto_scores: dict[chess.Square, float] = {}
+        last_auto_frame: np.ndarray | None = None
+        last_auto_event_time: float | None = None
+        auto_correction_pending = False
+        correction_clock_value: float | None = None
         dismissed_draw_claims: set[str] = set()
         fps_sample_started = time.monotonic()
         fps_sample_frames = 0
@@ -2134,6 +2165,12 @@ def main() -> None:
                 illegal_clock_side = None
                 game_result = "*"
                 game_finished = False
+                last_auto_move = None
+                last_auto_scores.clear()
+                last_auto_frame = None
+                last_auto_event_time = None
+                auto_correction_pending = False
+                correction_clock_value = None
                 dismissed_draw_claims.clear()
                 builtin_clock.reset(builtin_settings)
                 if clock_source == "builtin":
@@ -2317,6 +2354,9 @@ def main() -> None:
                             profile.learned_patterns()
                             if profile.learning_enabled
                             else None,
+                            profile.learned_rejections()
+                            if profile.learning_enabled
+                            else None,
                         )
                     )
                     if (
@@ -2448,6 +2488,12 @@ def main() -> None:
                                     profile_store.save(profile)
                                 board.push(candidate)
                                 moves.append(candidate)
+                                last_auto_move = candidate
+                                last_auto_scores = pending_scores.copy()
+                                last_auto_frame = pending_frame.copy()
+                                last_auto_event_time = event_time
+                                auto_correction_pending = False
+                                correction_clock_value = None
                                 outcome_time = (
                                     now
                                     if clock_source == "builtin"
@@ -2575,6 +2621,8 @@ def main() -> None:
                 if clock_source == "builtin"
                 else "LICHESS OCR CLOCK"
             )
+            if auto_correction_pending:
+                source_label = "MANUAL CORRECTION - AUTO NEXT MOVE"
             put_text(panel, source_label, (260, 172), (120, 220, 255), 0.46)
 
             if game_finished:
@@ -2657,19 +2705,6 @@ def main() -> None:
 
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
-            if clock_source == "builtin" and manual_clock_switch:
-                clock_key_label = (
-                    "CLOCK KEY WAITING"
-                    if manual_clock.pending is not None
-                    else "A=WHITE | L=BLACK"
-                )
-                put_text(
-                    combined,
-                    clock_key_label,
-                    (button_x + 142, 273),
-                    (80, 220, 255),
-                    0.34,
-                )
             game_buttons = [
                 Button(
                     "adjust_clocks",
@@ -2685,6 +2720,21 @@ def main() -> None:
                         and not illegal_warning
                     ),
                 ),
+                Button(
+                    "wrong_detection",
+                    "Detection wrong",
+                    button_x + 144,
+                    252,
+                    132,
+                    34,
+                    active=last_auto_move is not None,
+                    enabled=(
+                        last_auto_move is not None
+                        and bool(moves)
+                        and moves[-1] == last_auto_move
+                        and not auto_correction_pending
+                    ),
+                ),
                 Button("accept", "ACCEPT MOVE", button_x, 298, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
                 Button("previous", "Previous", button_x, 344, 132, 34, enabled=bool(pending) and not game_finished),
                 Button("next", "Next", button_x + 144, 344, 132, 34, enabled=bool(pending) and not game_finished),
@@ -2692,7 +2742,7 @@ def main() -> None:
                 Button("promote_r", "Rook", button_x + 144, 386, 132, 32, enabled=bool(pending) and not game_finished),
                 Button("promote_b", "Bishop", button_x, 426, 132, 32, enabled=bool(pending) and not game_finished),
                 Button("promote_n", "Knight", button_x + 144, 426, 132, 32, enabled=bool(pending) and not game_finished),
-                Button("undo", "Undo", button_x, 466, 132, 34, enabled=bool(moves) or manual_clock.pending is not None),
+                Button("undo", "Undo", button_x, 466, 132, 34, enabled=(bool(moves) or manual_clock.pending is not None) and not auto_correction_pending),
                 Button("new_game", "New game", button_x + 144, 466, 132, 34),
                 Button("offer_draw", "Offer draw", button_x, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
                 Button("resign", "Resign", button_x + 144, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
@@ -2763,6 +2813,64 @@ def main() -> None:
                 )
                 continue
 
+            if click_action == "wrong_detection" and last_auto_move is not None:
+                rejected_move = last_auto_move
+                removed_clock = move_clocks.pop()
+                move_clock_tokens.pop()
+                moves.pop()
+                board.pop()
+                game_result = "*"
+                game_finished = False
+                game_review = None
+                dismissed_draw_claims.clear()
+                profile.observe_rejection(
+                    rejected_move,
+                    last_auto_scores,
+                    weight=3,
+                )
+                profile_store.save(profile)
+                pending = manual_correction_candidates(
+                    board,
+                    last_auto_scores,
+                    rejected_move,
+                    profile,
+                )
+                pending_index = 0
+                pending_frame = (
+                    last_auto_frame.copy()
+                    if last_auto_frame is not None
+                    else warped.copy()
+                )
+                pending_event_time = last_auto_event_time or now
+                pending_scores = last_auto_scores.copy()
+                correction_clock_value = removed_clock
+                auto_correction_pending = True
+                if (
+                    clock_source == "builtin"
+                    and builtin_clock.active_white is None
+                ):
+                    # A false checkmate/draw popup may have paused the clock.
+                    # The original move time is already preserved, so the
+                    # opponent's clock should run during manual correction.
+                    builtin_clock.start(now, not board.turn)
+                last_auto_move = None
+                last_auto_scores.clear()
+                last_auto_frame = None
+                last_auto_event_time = None
+                accuracy_frames.clear()
+                save_game(
+                    moves,
+                    move_clocks,
+                    setup.pgn_headers(),
+                    game_result,
+                )
+                stable_since = None
+                status = (
+                    "Automatic detection undone. Select the correct move "
+                    "manually; automatic confirmation resumes next move."
+                )
+                continue
+
             if click_action == "adjust_clocks":
                 resume_side = builtin_clock.active_white
                 builtin_clock.pause(now)
@@ -2810,6 +2918,12 @@ def main() -> None:
                     status = (
                         "Restore the last legal position before pressing "
                         "a clock key."
+                    )
+                    continue
+                if auto_correction_pending:
+                    status = (
+                        "The clock time is already preserved. Select the "
+                        "correct move and press Enter."
                     )
                     continue
                 if manual_clock.pending is not None:
@@ -2946,6 +3060,12 @@ def main() -> None:
                     bullet_capture_due = None
                     accuracy_frames.clear()
                     previous = None
+                    last_auto_move = None
+                    last_auto_scores.clear()
+                    last_auto_frame = None
+                    last_auto_event_time = None
+                    auto_correction_pending = False
+                    correction_clock_value = None
                     start_pending = True
                     status = "Starting the configured game..."
             elif key == ord("u") and (moves or manual_clock.pending is not None):
@@ -2959,6 +3079,12 @@ def main() -> None:
                 move_clock_tokens.pop()
                 game_result = "*"
                 game_finished = False
+                last_auto_move = None
+                last_auto_scores.clear()
+                last_auto_frame = None
+                last_auto_event_time = None
+                auto_correction_pending = False
+                correction_clock_value = None
                 dismissed_draw_claims.clear()
                 board.reset()
                 for move in moves:
@@ -3004,9 +3130,11 @@ def main() -> None:
             elif pending and key in (10, 13):
                 selected_move = pending[pending_index].move
                 if selected_move in board.legal_moves and pending_frame is not None:
+                    was_auto_correction = auto_correction_pending
                     if (
                         clock_source == "builtin"
                         and manual_clock_switch
+                        and not was_auto_correction
                         and not manual_clock.ready_for(board.turn)
                     ):
                         status = (
@@ -3036,7 +3164,9 @@ def main() -> None:
                             ),
                         )
                     else:
-                        if manual_clock_switch:
+                        if was_auto_correction:
+                            move_clocks.append(correction_clock_value)
+                        elif manual_clock_switch:
                             move_clocks.append(
                                 manual_clock.consume(board.turn)
                             )
@@ -3049,14 +3179,28 @@ def main() -> None:
                         selected_move,
                         pending_scores,
                         selected_pattern.expected_squares,
-                        weight=2 if pending_index != 0 else 1,
+                        weight=(
+                            4
+                            if was_auto_correction
+                            else (2 if pending_index != 0 else 1)
+                        ),
                     )
                     profile_store.save(profile)
                     board.push(selected_move)
                     moves.append(selected_move)
+                    last_auto_move = None
+                    last_auto_scores.clear()
+                    last_auto_frame = None
+                    last_auto_event_time = None
+                    auto_correction_pending = False
+                    correction_clock_value = None
                     outcome_time = (
                         now
-                        if clock_source == "builtin" and manual_clock_switch
+                        if was_auto_correction
+                        or (
+                            clock_source == "builtin"
+                            and manual_clock_switch
+                        )
                         else event_time
                     )
                     position_notice = evaluate_position(outcome_time)
