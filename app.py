@@ -11,6 +11,7 @@ import chess
 import cv2
 import numpy as np
 
+from builtin_clock import BuiltInChessClock, ClockSettings
 from clock_reader import (
     BackgroundClockReader,
     BothClocks,
@@ -421,6 +422,112 @@ def reading_label(reading: object) -> str:
     return f"{format_pgn_clock(seconds)} ({confidence:.0%})"
 
 
+def format_display_clock(seconds: float) -> str:
+    safe = max(0.0, seconds)
+    hours = int(safe // 3600)
+    minutes = int((safe % 3600) // 60)
+    remaining = safe % 60
+    if safe < 10:
+        return f"{int(remaining):01d}.{int((remaining % 1) * 10):01d}"
+    if hours:
+        return f"{hours}:{minutes:02d}:{int(remaining):02d}"
+    return f"{minutes}:{int(remaining):02d}"
+
+
+def configure_builtin_clock(
+    current: ClockSettings,
+) -> ClockSettings | None:
+    """Open a cross-platform pre-game editor for asymmetric time controls."""
+    window = "Built-in clock setup"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 760, 500)
+
+    def noop(_value: int) -> None:
+        pass
+
+    cv2.createTrackbar(
+        "White minutes", window, int(current.white_initial_seconds // 60), 180, noop
+    )
+    cv2.createTrackbar(
+        "White seconds", window, int(current.white_initial_seconds % 60), 59, noop
+    )
+    cv2.createTrackbar(
+        "White increment", window, int(current.white_increment_seconds), 60, noop
+    )
+    cv2.createTrackbar(
+        "Black minutes", window, int(current.black_initial_seconds // 60), 180, noop
+    )
+    cv2.createTrackbar(
+        "Black seconds", window, int(current.black_initial_seconds % 60), 59, noop
+    )
+    cv2.createTrackbar(
+        "Black increment", window, int(current.black_increment_seconds), 60, noop
+    )
+
+    warning = ""
+    while True:
+        white_initial = (
+            cv2.getTrackbarPos("White minutes", window) * 60
+            + cv2.getTrackbarPos("White seconds", window)
+        )
+        black_initial = (
+            cv2.getTrackbarPos("Black minutes", window) * 60
+            + cv2.getTrackbarPos("Black seconds", window)
+        )
+        white_increment = cv2.getTrackbarPos("White increment", window)
+        black_increment = cv2.getTrackbarPos("Black increment", window)
+
+        view = np.zeros((310, 760, 3), dtype=np.uint8)
+        view[:] = (31, 34, 40)
+        put_text(view, "Built-in Chess Clock", (25, 42), (100, 220, 255), 0.86)
+        put_text(
+            view,
+            f"White: {format_display_clock(white_initial)} + {white_increment}s",
+            (25, 100),
+            (235, 235, 235),
+            0.76,
+        )
+        put_text(
+            view,
+            f"Black: {format_display_clock(black_initial)} + {black_increment}s",
+            (25, 145),
+            (170, 190, 255),
+            0.76,
+        )
+        put_text(
+            view,
+            "Adjust the six sliders above.",
+            (25, 205),
+            scale=0.58,
+        )
+        put_text(
+            view,
+            "ENTER saves | ESC cancels",
+            (25, 240),
+            (120, 255, 150),
+            0.62,
+        )
+        if warning:
+            put_text(view, warning, (25, 280), (70, 70, 255), 0.55)
+        cv2.imshow(window, view)
+
+        key = cv2.waitKey(25) & 0xFF
+        if key == 27:
+            cv2.destroyWindow(window)
+            return None
+        if key in (10, 13):
+            if white_initial < 1 or black_initial < 1:
+                warning = "Each player needs at least one second."
+                continue
+            cv2.destroyWindow(window)
+            return ClockSettings(
+                float(white_initial),
+                float(black_initial),
+                float(white_increment),
+                float(black_increment),
+            )
+
+
 def clock_for_player(
     clocks: BothClocks | None,
     player_is_white: bool,
@@ -486,8 +593,12 @@ def main() -> None:
         pending: list[RankedMove] = []
         pending_index = 0
         pending_frame: np.ndarray | None = None
+        pending_event_time: float | None = None
         auto_accept = False
         bullet_mode = False
+        clock_source = "ocr"
+        builtin_settings = ClockSettings()
+        builtin_clock = BuiltInChessClock(builtin_settings)
         illegal_warning = False
         status = "Place all pieces in the starting position, then press S."
         last_accept_time = 0.0
@@ -541,12 +652,14 @@ def main() -> None:
 
             collect_clock_results()
             if (
+                clock_source == "ocr"
+                and
                 now - last_clock_request >= CLOCK_PREVIEW_INTERVAL
                 and clock_worker.submit_periodic(raw, phone_corners)
             ):
                 last_clock_request = now
 
-            if bullet_mode:
+            if bullet_mode and clock_source == "ocr":
                 detected_side = detect_active_clock_side(raw, phone_corners)
                 if detected_side is not None:
                     last_active_clock_seen = now
@@ -587,7 +700,9 @@ def main() -> None:
                 and now >= bullet_capture_due
             )
             clock_side_available = (
-                bullet_mode and now - last_active_clock_seen < 0.5
+                bullet_mode
+                and clock_source == "ocr"
+                and now - last_active_clock_seen < 0.5
             )
             if illegal_warning:
                 # Always allow a stable restored board to clear the warning.
@@ -609,6 +724,11 @@ def main() -> None:
                 and analysis_ready
                 and now - last_accept_time >= accept_cooldown
             ):
+                analysis_event_time = (
+                    max(0.0, now - BULLET_SWITCH_SETTLE_SECONDS)
+                    if clock_boundary_ready
+                    else (stable_since if stable_since is not None else now)
+                )
                 if clock_boundary_ready:
                     bullet_capture_due = None
                 scores = square_change_scores(reference, warped)
@@ -627,6 +747,7 @@ def main() -> None:
                         illegal_warning = True
                         pending.clear()
                         pending_frame = None
+                        pending_event_time = None
                         status = (
                             "Illegal move detected. Return every changed piece "
                             "to the last legal position."
@@ -644,6 +765,7 @@ def main() -> None:
                     else:
                         pending_index = 0
                         pending_frame = warped.copy()
+                        pending_event_time = analysis_event_time
                         confidence = confidence_for(pending, scores)
                         if pending:
                             candidate = pending[0].move
@@ -659,24 +781,38 @@ def main() -> None:
                                 token = next_clock_token
                                 next_clock_token += 1
                                 move_clock_tokens.append(token)
-                                move_clocks.append(None)
-                                clock_worker.submit_move(
-                                    raw,
-                                    phone_corners,
-                                    (
-                                        "move",
-                                        move_index,
-                                        token,
-                                        board.turn,
-                                        bottom_clock_is_white,
-                                        now,
-                                    ),
-                                )
+                                event_time = pending_event_time or now
+                                if clock_source == "ocr":
+                                    move_clocks.append(None)
+                                    clock_worker.submit_move(
+                                        raw,
+                                        phone_corners,
+                                        (
+                                            "move",
+                                            move_index,
+                                            token,
+                                            board.turn,
+                                            bottom_clock_is_white,
+                                            event_time,
+                                        ),
+                                    )
+                                else:
+                                    move_clocks.append(
+                                        builtin_clock.complete_move(
+                                            board.turn, event_time
+                                        )
+                                    )
                                 board.push(candidate)
                                 moves.append(candidate)
+                                if (
+                                    clock_source == "builtin"
+                                    and board.is_game_over()
+                                ):
+                                    builtin_clock.pause(event_time)
                                 reference = pending_frame.copy()
                                 pending.clear()
                                 pending_frame = None
+                                pending_event_time = None
                                 save_game(moves, move_clocks)
                                 last_accept_time = now
                                 stable_since = None
@@ -710,35 +846,61 @@ def main() -> None:
                     f"Auto accept: {'ON' if auto_accept else 'OFF'}",
                     (25, 142),
                 )
-            if latest_clocks is not None:
-                white_reading = (
-                    latest_clocks.bottom
-                    if bottom_clock_is_white
-                    else latest_clocks.top
-                )
-                black_reading = (
-                    latest_clocks.top
-                    if bottom_clock_is_white
-                    else latest_clocks.bottom
-                )
+            if clock_source == "builtin":
                 put_text(
                     panel,
-                    f"White clock: {reading_label(white_reading)}",
+                    f"White clock: {format_display_clock(builtin_clock.remaining(True, now))}",
                     (25, 172),
                     (120, 220, 255),
                     0.56,
                 )
                 put_text(
                     panel,
-                    f"Black clock: {reading_label(black_reading)}",
+                    f"Black clock: {format_display_clock(builtin_clock.remaining(False, now))}",
                     (25, 198),
                     (120, 220, 255),
                     0.56,
                 )
+                put_text(
+                    panel,
+                    (
+                        f"Built-in: W +{builtin_settings.white_increment_seconds:g}s "
+                        f"| B +{builtin_settings.black_increment_seconds:g}s"
+                    ),
+                    (25, 224),
+                    (170, 210, 255),
+                    0.47,
+                )
             else:
-                put_text(panel, "Clocks: reading phone...", (25, 172), scale=0.56)
-            mapping = "bottom=White" if bottom_clock_is_white else "top=White"
-            put_text(panel, f"Clock mapping: {mapping}", (25, 224), scale=0.52)
+                if latest_clocks is not None:
+                    white_reading = (
+                        latest_clocks.bottom
+                        if bottom_clock_is_white
+                        else latest_clocks.top
+                    )
+                    black_reading = (
+                        latest_clocks.top
+                        if bottom_clock_is_white
+                        else latest_clocks.bottom
+                    )
+                    put_text(
+                        panel,
+                        f"White clock: {reading_label(white_reading)}",
+                        (25, 172),
+                        (120, 220, 255),
+                        0.56,
+                    )
+                    put_text(
+                        panel,
+                        f"Black clock: {reading_label(black_reading)}",
+                        (25, 198),
+                        (120, 220, 255),
+                        0.56,
+                    )
+                else:
+                    put_text(panel, "Clocks: reading phone...", (25, 172), scale=0.56)
+                mapping = "bottom=White" if bottom_clock_is_white else "top=White"
+                put_text(panel, f"OCR clock: {mapping}", (25, 224), scale=0.52)
 
             if selected:
                 put_text(
@@ -768,20 +930,23 @@ def main() -> None:
             if line:
                 put_text(panel, line, (25, y), scale=0.56)
 
-            if clock_error:
+            if clock_source == "ocr" and clock_error:
                 put_text(panel, "Clock OCR unavailable", (25, 405), (80, 80, 255), 0.52)
-            elif clock_worker.busy:
+            elif clock_source == "ocr" and clock_worker.busy:
                 put_text(panel, "Clock OCR: background", (25, 405), (120, 220, 255), 0.52)
+            elif clock_source == "builtin":
+                put_text(panel, "Clock source: BUILT-IN", (25, 405), (120, 255, 150), 0.52)
             put_text(panel, "Controls", (25, 438), (100, 220, 255), 0.68)
             controls = [
                 "ENTER accept | arrows candidate",
                 "Q/R/B/N promotion | U undo",
                 "A auto | B bullet mode | S new",
+                "T clock source | G clock setup",
                 "C calibrate all | K phone only",
                 "F swap clock sides | ESC quit",
             ]
             for row, label in enumerate(controls):
-                put_text(panel, label, (25, 470 + row * 27), scale=0.51)
+                put_text(panel, label, (25, 470 + row * 24), scale=0.49)
 
             combined = np.hstack([board_view, virtual_view, panel])
             if illegal_warning:
@@ -798,6 +963,7 @@ def main() -> None:
                 reference = None
                 previous = None
                 pending.clear()
+                pending_event_time = None
                 illegal_warning = False
                 status = "Calibration saved. Press S with pieces at the start."
             elif key == ord("k"):
@@ -807,13 +973,62 @@ def main() -> None:
                 last_clock_request = 0.0
                 status = "Phone calibration saved."
             elif key == ord("f"):
-                bottom_clock_is_white = not bottom_clock_is_white
-                save_config(board_corners, phone_corners, bottom_clock_is_white)
-                status = (
-                    "Clock sides swapped. "
-                    + ("Bottom is White." if bottom_clock_is_white else "Top is White.")
-                )
-            elif key == ord("b"):
+                if clock_source == "builtin":
+                    status = "F only changes the Lichess OCR clock mapping."
+                else:
+                    bottom_clock_is_white = not bottom_clock_is_white
+                    save_config(board_corners, phone_corners, bottom_clock_is_white)
+                    status = (
+                        "Clock sides swapped. "
+                        + (
+                            "Bottom is White."
+                            if bottom_clock_is_white
+                            else "Top is White."
+                        )
+                    )
+            elif key == ord("t"):
+                if moves:
+                    status = "Press S before changing the clock source."
+                elif clock_source == "ocr":
+                    updated = configure_builtin_clock(builtin_settings)
+                    if updated is not None:
+                        builtin_settings = updated
+                        builtin_clock.reset(builtin_settings)
+                        clock_source = "builtin"
+                        reference = None
+                        pending.clear()
+                        pending_event_time = None
+                        active_clock_side = None
+                        bullet_capture_due = None
+                        status = "Built-in clock selected. Press S to start it."
+                    else:
+                        status = "Clock source remains Lichess OCR."
+                else:
+                    clock_source = "ocr"
+                    reference = None
+                    pending.clear()
+                    pending_event_time = None
+                    active_clock_side = None
+                    bullet_capture_due = None
+                    status = "Lichess OCR clock selected. Press S to start."
+            elif key == ord("g"):
+                if moves:
+                    status = "Press S before changing built-in clock settings."
+                else:
+                    updated = configure_builtin_clock(builtin_settings)
+                    if updated is not None:
+                        builtin_settings = updated
+                        builtin_clock.reset(builtin_settings)
+                        clock_source = "builtin"
+                        reference = None
+                        pending.clear()
+                        pending_event_time = None
+                        active_clock_side = None
+                        bullet_capture_due = None
+                        status = "Built-in clock configured. Press S to start it."
+                    else:
+                        status = "Built-in clock setup cancelled."
+            elif key == ord("b") and not pending:
                 if moves:
                     status = "Press S to start a new game before changing modes."
                 else:
@@ -836,11 +1051,19 @@ def main() -> None:
                 reference = warped.copy()
                 pending.clear()
                 pending_frame = None
+                pending_event_time = None
                 illegal_warning = False
+                builtin_clock.reset(builtin_settings)
+                if clock_source == "builtin":
+                    builtin_clock.start(now, white_to_move=True)
                 save_game(moves, move_clocks)
                 last_accept_time = now
                 stable_since = None
-                status = "Game started. Make White's first move."
+                status = (
+                    "Game started with the built-in clock. Make White's first move."
+                    if clock_source == "builtin"
+                    else "Game started with Lichess OCR. Make White's first move."
+                )
             elif key == ord("a"):
                 if bullet_mode:
                     status = "Bullet Mode always uses automatic confirmation."
@@ -857,9 +1080,12 @@ def main() -> None:
                 board.reset()
                 for move in moves:
                     board.push(move)
+                if clock_source == "builtin":
+                    builtin_clock.undo(now)
                 reference = warped.copy()
                 pending.clear()
                 pending_frame = None
+                pending_event_time = None
                 illegal_warning = False
                 save_game(moves, move_clocks)
                 last_accept_time = now
@@ -892,24 +1118,33 @@ def main() -> None:
                     token = next_clock_token
                     next_clock_token += 1
                     move_clock_tokens.append(token)
-                    move_clocks.append(None)
-                    clock_worker.submit_move(
-                        raw,
-                        phone_corners,
-                        (
-                            "move",
-                            move_index,
-                            token,
-                            board.turn,
-                            bottom_clock_is_white,
-                            now,
-                        ),
-                    )
+                    event_time = pending_event_time or now
+                    if clock_source == "ocr":
+                        move_clocks.append(None)
+                        clock_worker.submit_move(
+                            raw,
+                            phone_corners,
+                            (
+                                "move",
+                                move_index,
+                                token,
+                                board.turn,
+                                bottom_clock_is_white,
+                                event_time,
+                            ),
+                        )
+                    else:
+                        move_clocks.append(
+                            builtin_clock.complete_move(board.turn, event_time)
+                        )
                     board.push(selected_move)
                     moves.append(selected_move)
+                    if clock_source == "builtin" and board.is_game_over():
+                        builtin_clock.pause(event_time)
                     reference = pending_frame.copy()
                     pending.clear()
                     pending_frame = None
+                    pending_event_time = None
                     save_game(moves, move_clocks)
                     last_accept_time = now
                     stable_since = None
