@@ -19,13 +19,16 @@ from clock_reader import (
     format_pgn_clock,
 )
 from chess_tracker import (
+    BOARD_MARGIN_PIXELS,
     BOARD_PIXELS,
     RankedMove,
+    WARP_PIXELS,
     analyze_frame_consensus,
     board_looks_restored,
     confidence_for,
     legal_move_fit,
     move_with_promotion,
+    orient_board_image,
     rank_legal_moves,
     square_change_scores,
     warp_board,
@@ -180,8 +183,8 @@ def calibrate_board(capture: cv2.VideoCapture) -> list[list[float]]:
     return calibrate_quadrilateral(
         capture,
         "Calibration 1/2 - click board corners",
-        ["a8 corner", "h8 corner", "h1 corner", "a1 corner"],
-        "White must be nearest the camera. Keep the whole board and phone visible.",
+        ["image top-left", "image top-right", "image bottom-right", "image bottom-left"],
+        "Use the corners as seen on screen. Keep some space around every board edge.",
     )
 
 
@@ -198,6 +201,7 @@ def save_config(
     board_corners: list[list[float]],
     phone_corners: list[list[float]],
     bottom_clock_is_white: bool,
+    white_camera_edge: str,
 ) -> None:
     CONFIG_PATH.write_text(
         json.dumps(
@@ -205,6 +209,7 @@ def save_config(
                 "board_corners": board_corners,
                 "phone_corners": phone_corners,
                 "bottom_clock_is_white": bottom_clock_is_white,
+                "white_camera_edge": white_camera_edge,
             },
             indent=2,
         ),
@@ -220,7 +225,8 @@ def draw_grid(board_image: np.ndarray, highlighted: set[int]) -> np.ndarray:
     for square in highlighted:
         file_index = chess.square_file(square)
         rank_from_top = 7 - chess.square_rank(square)
-        x0, y0 = file_index * cell, rank_from_top * cell
+        x0 = BOARD_MARGIN_PIXELS + file_index * cell
+        y0 = BOARD_MARGIN_PIXELS + rank_from_top * cell
         cv2.rectangle(
             overlay, (x0, y0), (x0 + cell, y0 + cell), (0, 215, 255), -1
         )
@@ -228,9 +234,21 @@ def draw_grid(board_image: np.ndarray, highlighted: set[int]) -> np.ndarray:
         view = cv2.addWeighted(overlay, 0.26, view, 0.74, 0)
 
     for index in range(9):
-        value = index * cell
-        cv2.line(view, (value, 0), (value, BOARD_PIXELS), (255, 255, 255), 1)
-        cv2.line(view, (0, value), (BOARD_PIXELS, value), (255, 255, 255), 1)
+        value = BOARD_MARGIN_PIXELS + index * cell
+        cv2.line(
+            view,
+            (value, BOARD_MARGIN_PIXELS),
+            (value, BOARD_MARGIN_PIXELS + BOARD_PIXELS),
+            (255, 255, 255),
+            1,
+        )
+        cv2.line(
+            view,
+            (BOARD_MARGIN_PIXELS, value),
+            (BOARD_MARGIN_PIXELS + BOARD_PIXELS, value),
+            (255, 255, 255),
+            1,
+        )
     return view
 
 
@@ -242,13 +260,13 @@ def render_grid_verification(board_image: np.ndarray) -> np.ndarray:
             square_name = chess.square_name(
                 chess.square(file_index, 7 - rank_from_top)
             )
-            x = file_index * 100 + 7
-            y = rank_from_top * 100 + 23
+            x = BOARD_MARGIN_PIXELS + file_index * 100 + 7
+            y = BOARD_MARGIN_PIXELS + rank_from_top * 100 + 23
             put_text(view, square_name, (x, y), (40, 245, 255), 0.45)
     put_text(
         view,
-        "Each piece must sit inside its labeled square. ENTER or ESC closes.",
-        (24, 785),
+        "Grid follows board edges; tall edge pieces may extend into the outer margin.",
+        (24, WARP_PIXELS - 18),
         (255, 255, 255),
         0.48,
     )
@@ -258,14 +276,18 @@ def render_grid_verification(board_image: np.ndarray) -> np.ndarray:
 def show_grid_verification(
     capture: cv2.VideoCapture,
     board_corners: list[list[float]],
+    white_camera_edge: str,
 ) -> None:
     window = "Chess Camera - 64 Square Check"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 800, 820)
+    cv2.resizeWindow(window, 900, 900)
     while True:
         ok, raw = capture.read()
         if ok:
-            board_view = warp_board(raw, board_corners)
+            board_view = orient_board_image(
+                warp_board(raw, board_corners),
+                white_camera_edge,
+            )
             labeled = render_grid_verification(board_view)
             cv2.imshow(window, labeled)
         key = cv2.waitKey(20) & 0xFF
@@ -693,7 +715,7 @@ def run_pregame_wizard(
     """Run the clickable game-settings step after camera calibration."""
     window = "Chess Camera - Step 2: Game Settings"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 1100, 760)
+    cv2.resizeWindow(window, 1100, 820)
     current_buttons: list[Button] = []
     click_queue: list[str] = []
     focused_field: str | None = None
@@ -733,6 +755,7 @@ def run_pregame_wizard(
                 board_corners,
                 phone_corners,
                 setup.bottom_clock_is_white,
+                setup.white_camera_edge,
             )
             message = "Board calibration updated."
             continue
@@ -743,12 +766,17 @@ def run_pregame_wizard(
                 board_corners,
                 phone_corners,
                 setup.bottom_clock_is_white,
+                setup.white_camera_edge,
             )
             message = "Phone calibration updated."
             continue
         if action == "verify_grid":
             focused_field = None
-            show_grid_verification(capture, board_corners)
+            show_grid_verification(
+                capture,
+                board_corners,
+                setup.white_camera_edge,
+            )
             message = "64-square grid checked."
             continue
         if action == "start" or (key in (10, 13) and focused_field is None):
@@ -756,6 +784,7 @@ def run_pregame_wizard(
                 board_corners,
                 phone_corners,
                 setup.bottom_clock_is_white,
+                setup.white_camera_edge,
             )
             cv2.destroyWindow(window)
             return setup, board_corners, phone_corners
@@ -1011,13 +1040,25 @@ def main() -> None:
             if phone_corners is None:
                 phone_corners = calibrate_phone(capture)
             bottom_clock_is_white = bool(config.get("bottom_clock_is_white", True))
+            white_camera_edge = str(config.get("white_camera_edge", "bottom"))
+            if white_camera_edge not in {"bottom", "top", "left", "right"}:
+                white_camera_edge = "bottom"
         else:
             board_corners = calibrate_board(capture)
             phone_corners = calibrate_phone(capture)
             bottom_clock_is_white = True
-        save_config(board_corners, phone_corners, bottom_clock_is_white)
+            white_camera_edge = "bottom"
+        save_config(
+            board_corners,
+            phone_corners,
+            bottom_clock_is_white,
+            white_camera_edge,
+        )
 
-        setup = GameSetup(bottom_clock_is_white=bottom_clock_is_white)
+        setup = GameSetup(
+            bottom_clock_is_white=bottom_clock_is_white,
+            white_camera_edge=white_camera_edge,
+        )
         wizard_result = run_pregame_wizard(
             capture,
             setup,
@@ -1180,7 +1221,10 @@ def main() -> None:
             ok, raw = capture.read()
             if not ok:
                 continue
-            warped = warp_board(raw, board_corners)
+            warped = orient_board_image(
+                warp_board(raw, board_corners),
+                setup.white_camera_edge,
+            )
             now = time.monotonic()
             fps_sample_frames += 1
             fps_elapsed = now - fps_sample_started
