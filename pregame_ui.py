@@ -9,7 +9,7 @@ from builtin_clock import ClockSettings
 
 
 SETUP_WIDTH = 1100
-SETUP_HEIGHT = 700
+SETUP_HEIGHT = 760
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class GameSetup:
     bullet_mode: bool = False
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
+    manual_clock_switch: bool = False
     clock_settings: ClockSettings = ClockSettings()
 
     def pgn_headers(self) -> dict[str, str]:
@@ -302,6 +303,31 @@ def render_setup_screen(
                 ),
             ],
         ),
+        (
+            "Clock switch",
+            [
+                Button(
+                    "clock_switch_camera",
+                    "Camera automatic",
+                    155,
+                    588,
+                    175,
+                    42,
+                    not setup.manual_clock_switch,
+                    setup.clock_source == "builtin",
+                ),
+                Button(
+                    "clock_switch_manual",
+                    "Player button",
+                    345,
+                    588,
+                    175,
+                    42,
+                    setup.manual_clock_switch,
+                    setup.clock_source == "builtin",
+                ),
+            ],
+        ),
     ]
     for row, row_buttons in option_rows:
         draw_text(view, row, (42, row_buttons[0].y + 27), scale=0.48)
@@ -379,18 +405,18 @@ def render_setup_screen(
         draw_text(view, "Calibration saved", (785, 546), (120, 255, 170), 0.48)
 
     calibration_buttons = [
-        Button("calibrate_board", "Recalibrate board", 40, 620, 205, 48),
-        Button("calibrate_phone", "Recalibrate phone", 260, 620, 205, 48),
+        Button("calibrate_board", "Recalibrate board", 40, 680, 205, 48),
+        Button("calibrate_phone", "Recalibrate phone", 260, 680, 205, 48),
     ]
     for button in calibration_buttons:
         buttons.append(button)
         draw_button(view, button)
 
-    start_button = Button("start", "START GAME", 820, 610, 240, 58, active=True)
+    start_button = Button("start", "START GAME", 820, 670, 240, 58, active=True)
     buttons.append(start_button)
     draw_button(view, start_button)
     if message:
-        draw_text(view, message[:60], (600, 598), (120, 220, 255), 0.46)
+        draw_text(view, message[:60], (600, 658), (120, 220, 255), 0.46)
 
     return view, buttons
 
@@ -410,6 +436,10 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         return replace(setup, bottom_clock_is_white=True)
     if action == "mapping_top":
         return replace(setup, bottom_clock_is_white=False)
+    if action == "clock_switch_camera" and setup.clock_source == "builtin":
+        return replace(setup, manual_clock_switch=False)
+    if action == "clock_switch_manual" and setup.clock_source == "builtin":
+        return replace(setup, manual_clock_switch=True)
 
     settings = setup.clock_settings
     values = {
