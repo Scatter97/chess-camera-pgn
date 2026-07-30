@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 12)
+# Physical Chess Camera → Timed PGN (Revision 13)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -30,21 +30,24 @@ Player and event names are included in the saved PGN headers.
 
 ## Automatic or manual built-in clock switching
 
-Revision 12 adds a **Clock switch** choice to the pre-game settings when the
+Revision 13 adds a **Clock switch** choice to the pre-game settings when the
 built-in clock is selected:
 
 - **Camera automatic:** the camera stops the player’s clock when the move is
   detected and accepted. This is the original behavior.
-- **Player button:** the match screen shows **End White Turn** or
-  **End Black Turn**. The player clicks it after completing the physical move.
-  Their clock stops immediately, their increment is added, and the opponent’s
-  clock starts.
+- **Player keys A / L:** White presses **A** on the left side of the keyboard,
+  and Black presses **L** on the right side. The key is pressed after completing
+  the physical move. The player’s clock stops immediately, their increment is
+  added, and the opponent’s clock starts.
 
-In Player button mode, the camera move cannot be accepted until the correct
-player has pressed the clock button. If automatic confirmation or Bullet Mode
-is active and the camera already has a move waiting, pressing the clock button
-also accepts that move. If the clock was pressed accidentally before the move
-was accepted, click **Undo** to cancel that clock press.
+In Player keys mode, the camera move cannot be accepted until the correct
+player has pressed their key. Pressing the wrong player’s key shows a warning
+and does not switch the clock. If automatic confirmation or Bullet Mode is
+active and the camera already has a move waiting, pressing the correct key also
+accepts that move. If a key was pressed accidentally before the move was
+accepted, click **Undo** to cancel that clock press.
+
+There is no clickable clock-switch button on the match screen.
 
 This setting only affects the built-in clock. Lichess OCR continues to read the
 phone clock, which the players operate on the phone itself.
