@@ -66,6 +66,7 @@ def rank_legal_moves(
     board: chess.Board,
     square_scores: dict[chess.Square, float],
     learned_patterns: dict[str, list[float]] | None = None,
+    rejected_patterns: dict[str, list[float]] | None = None,
 ) -> list[RankedMove]:
     """
     Rank legal moves against observed per-square visual changes.
@@ -102,6 +103,22 @@ def rank_legal_moves(
                     # A learned signature is supporting evidence, while the
                     # legal-move square explanation remains the main signal.
                     score += max(0.0, similarity - 0.45) * 5.0
+        if rejected_patterns:
+            rejected = rejected_patterns.get(move.uci())
+            if rejected is not None and len(rejected) == 64:
+                observed = np.asarray(
+                    [square_scores[square] for square in chess.SQUARES],
+                    dtype=np.float64,
+                )
+                learned_rejection = np.asarray(rejected, dtype=np.float64)
+                observed_norm = float(np.linalg.norm(observed))
+                rejection_norm = float(np.linalg.norm(learned_rejection))
+                if observed_norm > 0 and rejection_norm > 0:
+                    similarity = float(
+                        np.dot(observed, learned_rejection)
+                        / (observed_norm * rejection_norm)
+                    )
+                    score -= max(0.0, similarity - 0.45) * 6.0
         ranked.append(RankedMove(move, score, expected))
 
     # The camera cannot distinguish promotion piece types. Prefer queen unless
