@@ -448,10 +448,10 @@ def render_setup_screen(
                 ),
                 Button(
                     "mode_bullet",
-                    "Bullet",
-                    407,
+                    "Bullet (BETA)",
+                    395,
                     426,
-                    113,
+                    125,
                     42,
                     setup.bullet_mode,
                 ),
