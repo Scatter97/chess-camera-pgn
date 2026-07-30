@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 import time
 
@@ -51,6 +52,7 @@ from game_analysis import (
     classify_move,
     find_stockfish,
     move_accuracy,
+    probe_uci_engine,
     save_analysis_report,
 )
 from pregame_ui import (
@@ -472,6 +474,8 @@ def test_pregame_text_fields_and_click_targets() -> None:
     )
     train = next(button for button in buttons if button.action == "profile_train")
     assert clicked_action(buttons, train.x + 5, train.y + 5) == "profile_train"
+    engine = next(button for button in buttons if button.action == "select_engine")
+    assert clicked_action(buttons, engine.x + 5, engine.y + 5) == "select_engine"
 
 
 def test_board_profiles_persist_calibration_and_training(tmp_path: Path) -> None:
@@ -602,6 +606,49 @@ def test_stockfish_path_can_be_supplied_explicitly(tmp_path: Path) -> None:
     executable.write_text("", encoding="utf-8")
     executable.chmod(0o755)
     assert find_stockfish(str(executable)) == executable.resolve()
+
+
+def test_selected_uci_engine_is_probed_for_name(tmp_path: Path) -> None:
+    if sys.platform == "win32":
+        return
+    executable = tmp_path / "test-engine"
+    executable.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "for line in sys.stdin:\n"
+        "    command = line.strip()\n"
+        "    if command == 'uci':\n"
+        "        print('id name TestFish', flush=True)\n"
+        "        print('id author Chess Camera tests', flush=True)\n"
+        "        print('uciok', flush=True)\n"
+        "    elif command == 'isready':\n"
+        "        print('readyok', flush=True)\n"
+        "    elif command == 'quit':\n"
+        "        break\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    assert probe_uci_engine(executable) == "TestFish"
+
+
+def test_selected_engine_path_is_saved_in_config(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import app as app_module
+
+    config_path = tmp_path / "camera_config.json"
+    monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]
+    engine_path = tmp_path / "engine"
+    app_module.save_config(
+        [[0.0, 0.0]] * 4,
+        [[1.0, 1.0]] * 4,
+        True,
+        "bottom",
+        "Test board",
+        engine_path,
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["engine_path"] == str(engine_path)
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
