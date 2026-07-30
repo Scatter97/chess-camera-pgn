@@ -322,9 +322,10 @@ def _text_field(
     value: str,
     y: int,
     focused: bool,
+    width: int = 490,
 ) -> None:
     draw_text(image, label, (42, y - 9), (165, 175, 190), 0.48)
-    field = Button(action, "", 40, y, 490, 44, active=focused)
+    field = Button(action, "", 40, y, width, 44, active=focused)
     buttons.append(field)
     cv2.rectangle(
         image,
@@ -355,11 +356,40 @@ def _text_field(
         )
 
 
+def _suggestion_buttons(
+    image: np.ndarray,
+    buttons: list[Button],
+    field: str,
+    suggestions: tuple[str, ...],
+    y: int,
+    visible: bool,
+) -> None:
+    if not visible:
+        return
+    x = 40
+    for index, suggestion in enumerate(suggestions[:3]):
+        label = suggestion[:18]
+        width = min(112, max(82, 18 + len(label) * 8))
+        button = Button(
+            f"suggest_{field}_{index}",
+            label,
+            x,
+            y,
+            width,
+            24,
+        )
+        buttons.append(button)
+        draw_button(image, button)
+        x += width + 8
+
+
 def render_setup_screen(
     setup: GameSetup,
     focused_field: str | None,
     camera_preview: np.ndarray | None = None,
     message: str = "",
+    player_suggestions: tuple[str, ...] = (),
+    event_suggestions: tuple[str, ...] = (),
 ) -> tuple[np.ndarray, list[Button]]:
     view = np.zeros((SETUP_HEIGHT, SETUP_WIDTH, 3), dtype=np.uint8)
     view[:] = (28, 31, 37)
@@ -380,6 +410,7 @@ def render_setup_screen(
         setup.white_name,
         122,
         focused_field == "white",
+        370,
     )
     _text_field(
         view,
@@ -389,6 +420,7 @@ def render_setup_screen(
         setup.black_name,
         196,
         focused_field == "black",
+        370,
     )
     _text_field(
         view,
@@ -397,6 +429,33 @@ def render_setup_screen(
         "EVENT",
         setup.event_name,
         270,
+        focused_field == "event",
+    )
+    swap_button = Button("swap_players", "Swap sides", 425, 139, 105, 72)
+    buttons.append(swap_button)
+    draw_button(view, swap_button)
+    _suggestion_buttons(
+        view,
+        buttons,
+        "white",
+        player_suggestions,
+        168,
+        focused_field == "white",
+    )
+    _suggestion_buttons(
+        view,
+        buttons,
+        "black",
+        player_suggestions,
+        242,
+        focused_field == "black",
+    )
+    _suggestion_buttons(
+        view,
+        buttons,
+        "event",
+        event_suggestions,
+        316,
         focused_field == "event",
     )
 
@@ -741,12 +800,24 @@ def render_setup_screen(
     )
     buttons.append(engine_button)
     draw_button(view, engine_button)
+    rename_button = Button("profile_rename", "Rename preset", 155, 772, 180, 42)
+    reset_button = Button(
+        "profile_reset_training",
+        "Reset training",
+        350,
+        772,
+        180,
+        42,
+    )
+    buttons.extend((rename_button, reset_button))
+    draw_button(view, rename_button)
+    draw_button(view, reset_button)
     draw_text(
         view,
-        "Profiles keep separate calibration and learn from confirmed moves.",
-        (155, 788),
+        "Reset keeps calibration. Profiles learn from confirmed moves.",
+        (548, 799),
         (165, 175, 190),
-        0.43,
+        0.39,
     )
 
     calibration_buttons = [
@@ -768,6 +839,12 @@ def render_setup_screen(
 
 
 def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
+    if action == "swap_players":
+        return replace(
+            setup,
+            white_name=setup.black_name,
+            black_name=setup.white_name,
+        )
     if action == "clock_ocr":
         return replace(setup, clock_source="ocr")
     if action == "clock_builtin":
