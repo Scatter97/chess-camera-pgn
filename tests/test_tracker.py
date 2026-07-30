@@ -11,7 +11,7 @@ from app import (
     select_camera_backend,
     select_promotion_candidate,
 )
-from builtin_clock import BuiltInChessClock, ClockSettings
+from builtin_clock import BuiltInChessClock, ClockSettings, ManualClockController
 from clock_reader import (
     BackgroundClockReader,
     BothClocks,
@@ -245,6 +245,7 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = apply_setup_action(setup, "black_plus10")
     setup = apply_setup_action(setup, "black_inc_plus")
     setup = apply_setup_action(setup, "mode_bullet")
+    setup = apply_setup_action(setup, "clock_switch_manual")
 
     assert setup.clock_source == "builtin"
     assert setup.clock_settings.white_initial_seconds == 240
@@ -252,6 +253,7 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     assert setup.clock_settings.black_increment_seconds == 1
     assert setup.bullet_mode
     assert setup.auto_accept
+    assert setup.manual_clock_switch
 
 
 def test_pregame_text_fields_and_click_targets() -> None:
@@ -261,7 +263,7 @@ def test_pregame_text_fields_and_click_targets() -> None:
     screen, buttons = render_setup_screen(setup, "white")
 
     assert setup.white_name == "Josh"
-    assert screen.shape == (700, 1100, 3)
+    assert screen.shape == (760, 1100, 3)
     start = next(button for button in buttons if button.action == "start")
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
 
@@ -347,3 +349,29 @@ def test_pgn_writes_final_result(tmp_path: Path) -> None:
     text = target.read_text(encoding="utf-8")
     assert '[Result "1/2-1/2"]' in text
     assert text.rstrip().endswith("1/2-1/2")
+
+
+def test_manual_clock_press_waits_for_camera_move_and_can_be_cancelled() -> None:
+    clock = BuiltInChessClock(
+        ClockSettings(
+            white_initial_seconds=60,
+            black_initial_seconds=120,
+            white_increment_seconds=2,
+            black_increment_seconds=5,
+        )
+    )
+    controller = ManualClockController()
+    clock.start(100.0)
+
+    record = controller.press(clock, True, 110.0)
+    assert record.recorded_seconds == 52.0
+    assert controller.ready_for(True)
+    assert clock.active_white is False
+    assert controller.consume(True) == 52.0
+    assert controller.pending is None
+
+    record = controller.press(clock, False, 120.0)
+    assert record.recorded_seconds == 115.0
+    assert controller.cancel(clock, 121.0)
+    assert controller.pending is None
+    assert clock.active_white is False
