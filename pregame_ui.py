@@ -20,6 +20,7 @@ class GameSetup:
     clock_source: str = "ocr"
     fast_mode: bool = False
     bullet_mode: bool = False
+    accuracy_boost: bool = False
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
     manual_clock_switch: bool = False
@@ -414,9 +415,24 @@ def render_setup_screen(
         draw_text(view, "Live camera", (785, 518), (165, 175, 190), 0.48)
         draw_text(view, "Calibration saved", (785, 546), (120, 255, 170), 0.48)
 
+    draw_text(view, "Accuracy", (600, 621), scale=0.48)
+    accuracy_button = Button(
+        "accuracy_toggle",
+        "Boost ON - 3 frames" if setup.accuracy_boost else "Boost OFF",
+        720,
+        594,
+        340,
+        42,
+        setup.accuracy_boost,
+        not setup.bullet_mode,
+    )
+    buttons.append(accuracy_button)
+    draw_button(view, accuracy_button)
+
     calibration_buttons = [
         Button("calibrate_board", "Recalibrate board", 40, 680, 205, 48),
         Button("calibrate_phone", "Recalibrate phone", 260, 680, 205, 48),
+        Button("verify_grid", "Check all 64 squares", 480, 680, 240, 48),
     ]
     for button in calibration_buttons:
         buttons.append(button)
@@ -445,8 +461,11 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
             setup,
             fast_mode=False,
             bullet_mode=True,
+            accuracy_boost=False,
             auto_accept=True,
         )
+    if action == "accuracy_toggle" and not setup.bullet_mode:
+        return replace(setup, accuracy_boost=not setup.accuracy_boost)
     if action == "auto_toggle" and not setup.bullet_mode:
         return replace(setup, auto_accept=not setup.auto_accept)
     if action == "mapping_bottom":
