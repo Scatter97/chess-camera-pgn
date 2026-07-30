@@ -111,6 +111,25 @@ def split_and_rotate(phone: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     )
 
 
+def detect_active_clock_side(
+    frame: np.ndarray, corners: Iterable[Iterable[float]], minimum_difference: float = 24.0
+) -> str | None:
+    """
+    Detect which Lichess clock half is active from its brighter colored field.
+
+    This uses simple image brightness rather than OCR, so it is fast enough to
+    provide move boundaries in Bullet Mode.
+    """
+    phone = warp_phone(frame, corners)
+    top = phone[: int(PHONE_HEIGHT * 0.43)]
+    bottom = phone[int(PHONE_HEIGHT * 0.57) :]
+    top_value = float(np.median(cv2.cvtColor(top, cv2.COLOR_BGR2HSV)[:, :, 2]))
+    bottom_value = float(np.median(cv2.cvtColor(bottom, cv2.COLOR_BGR2HSV)[:, :, 2]))
+    if abs(top_value - bottom_value) < minimum_difference:
+        return None
+    return "top" if top_value > bottom_value else "bottom"
+
+
 class LichessClockReader:
     def __init__(self) -> None:
         self._engine = RapidOCR()
