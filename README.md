@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 17)
+# Physical Chess Camera → Timed PGN (Revision 18)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,12 @@ The game-settings screen contains clickable choices for:
 
 Player and event names are included in the saved PGN headers.
 
+## Revision 18: larger edge margin
+
+The automatic exterior detection margin is now 100 pixels on every side,
+equal to one full corrected-board square. Calibration is unchanged: click the
+exact corners of the 8×8 playing grid, and the app adds the margin itself.
+
 ## Revision 17: angled pieces and camera orientation
 
 The camera no longer needs to be on White's side. In game settings, use
@@ -42,7 +48,7 @@ Board calibration now uses the four corners as they appear on the camera:
 image top-left, image top-right, image bottom-right, then image bottom-left.
 The corner labels no longer depend on which player is nearest the camera.
 
-The corrected camera image also keeps a 75-pixel detection margin outside every
+The corrected camera image also keeps a 100-pixel detection margin outside every
 board edge. The first and eighth ranks—and the `a`- and `h`-files when the
 camera is beside the board—use these exterior strips as extra visual evidence.
 This helps recognize tall pieces whose tops appear to lean outside the flat
