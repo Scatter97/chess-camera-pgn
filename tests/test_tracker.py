@@ -11,6 +11,7 @@ from clock_reader import (
     BackgroundClockReader,
     BothClocks,
     ClockReading,
+    detect_active_clock_side,
     format_pgn_clock,
     parse_clock_text,
 )
@@ -57,6 +58,18 @@ def test_background_clock_reader_returns_tagged_result() -> None:
     assert results[0].tag == "m1"
     assert results[0].clocks == expected
     assert results[0].error is None
+
+
+def test_active_clock_side_detection() -> None:
+    frame = np.zeros((960, 480, 3), dtype=np.uint8)
+    frame[:430] = (50, 50, 50)
+    frame[550:] = (190, 150, 110)
+    corners = [[0, 0], [479, 0], [479, 959], [0, 959]]
+    assert detect_active_clock_side(frame, corners) == "bottom"
+
+    frame[:430] = (190, 150, 110)
+    frame[550:] = (50, 50, 50)
+    assert detect_active_clock_side(frame, corners) == "top"
 
 
 def test_normal_move_changes_two_squares() -> None:
