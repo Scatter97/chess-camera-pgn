@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 13)
+# Physical Chess Camera → Timed PGN (Revision 14)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -27,6 +27,19 @@ The game-settings screen contains clickable choices for:
 - board or phone recalibration.
 
 Player and event names are included in the saved PGN headers.
+
+## Illegal-move recovery
+
+Revision 14 pauses the built-in clock when the camera confirms an illegal
+position. Return the pieces to the last recorded position and leave the board
+still; the red warning then disappears automatically and the same player’s
+clock resumes. The restoration check tolerates small camera noise and minor
+piece-placement differences.
+
+If a player pressed their A/L clock key before the illegal move was recognized,
+that clock press is cancelled so the same player can retry. In Lichess OCR
+mode, the app cannot control the phone, so pause and resume the Lichess clock
+on the phone itself.
 
 ## Automatic or manual built-in clock switching
 
