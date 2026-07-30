@@ -10,6 +10,26 @@ from builtin_clock import ClockSettings
 
 SETUP_WIDTH = 1100
 SETUP_HEIGHT = 920
+TIME_CONTROL_PRESETS: tuple[tuple[str, int, int], ...] = (
+    ("1+0", 60, 0),
+    ("2+1", 120, 1),
+    ("3+0", 180, 0),
+    ("3+2", 180, 2),
+    ("5+0", 300, 0),
+    ("5+3", 300, 3),
+    ("10+0", 600, 0),
+    ("10+5", 600, 5),
+    ("15+10", 900, 10),
+    ("30+0", 1800, 0),
+)
+DEFAULT_PINNED_TIME_CONTROLS: tuple[str, ...] = (
+    "1+0",
+    "3+0",
+    "3+2",
+    "5+0",
+    "10+0",
+    "15+10",
+)
 
 
 @dataclass(frozen=True)
@@ -26,6 +46,7 @@ class GameSetup:
     bottom_clock_is_white: bool = True
     manual_clock_switch: bool = False
     separate_time_controls: bool = False
+    pinned_time_controls: tuple[str, ...] = DEFAULT_PINNED_TIME_CONTROLS
     profile_name: str = "Default board"
     profile_samples: int = 0
     learning_enabled: bool = True
@@ -135,6 +156,44 @@ def clicked_action(buttons: list[Button], x: int, y: int) -> str | None:
 def _clock_label(seconds: float) -> str:
     safe = max(0, int(seconds))
     return f"{safe // 60}:{safe % 60:02d}"
+
+
+def time_control_for_label(label: str) -> tuple[int, int] | None:
+    for preset_label, initial_seconds, increment_seconds in TIME_CONTROL_PRESETS:
+        if preset_label == label:
+            return initial_seconds, increment_seconds
+    return None
+
+
+def normalize_pinned_time_controls(values: object) -> tuple[str, ...]:
+    """Keep known, unique preset labels in display order, with at most six."""
+    if not isinstance(values, (list, tuple)):
+        return DEFAULT_PINNED_TIME_CONTROLS
+    requested = {value for value in values if isinstance(value, str)}
+    return tuple(
+        label
+        for label, _initial, _increment in TIME_CONTROL_PRESETS
+        if label in requested
+    )[:6]
+
+
+def toggle_pinned_time_control(
+    pinned: tuple[str, ...],
+    label: str,
+) -> tuple[str, ...]:
+    """Add or remove one known preset while limiting the setup grid to six."""
+    if time_control_for_label(label) is None:
+        return pinned
+    if label in pinned:
+        return tuple(value for value in pinned if value != label)
+    if len(pinned) >= 6:
+        return pinned
+    selected = {*pinned, label}
+    return tuple(
+        value
+        for value, _initial, _increment in TIME_CONTROL_PRESETS
+        if value in selected
+    )
 
 
 def _text_field(
@@ -441,6 +500,52 @@ def render_setup_screen(
             buttons.append(button)
             draw_button(view, button)
 
+    if enabled and not setup.separate_time_controls:
+        draw_text(view, "Pinned presets", (600, 342), (165, 175, 190), 0.49)
+        choose_presets = Button(
+            "choose_pinned_presets",
+            "Choose pinned presets...",
+            830,
+            315,
+            230,
+            38,
+        )
+        buttons.append(choose_presets)
+        draw_button(view, choose_presets)
+        if setup.pinned_time_controls:
+            for index, label in enumerate(setup.pinned_time_controls[:6]):
+                preset = time_control_for_label(label)
+                if preset is None:
+                    continue
+                initial_seconds, increment_seconds = preset
+                selected = (
+                    setup.clock_settings.white_initial_seconds == initial_seconds
+                    and setup.clock_settings.black_initial_seconds == initial_seconds
+                    and setup.clock_settings.white_increment_seconds
+                    == increment_seconds
+                    and setup.clock_settings.black_increment_seconds
+                    == increment_seconds
+                )
+                button = Button(
+                    f"apply_preset_{label}",
+                    label,
+                    600 + (index % 3) * 155,
+                    365 + (index // 3) * 48,
+                    140,
+                    38,
+                    active=selected,
+                )
+                buttons.append(button)
+                draw_button(view, button)
+        else:
+            draw_text(
+                view,
+                "No presets pinned. Use Choose pinned presets...",
+                (600, 385),
+                (135, 145, 160),
+                0.45,
+            )
+
     if camera_preview is not None:
         preview = cv2.resize(camera_preview, (172, 97))
         view[483:580, 600:772] = preview
@@ -604,6 +709,26 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         return replace(setup, separate_time_controls=True)
     if action == "learning_toggle":
         return replace(setup, learning_enabled=not setup.learning_enabled)
+    if action.startswith("apply_preset_"):
+        label = action.removeprefix("apply_preset_")
+        preset = time_control_for_label(label)
+        if (
+            preset is None
+            or label not in setup.pinned_time_controls
+            or setup.clock_source != "builtin"
+            or setup.separate_time_controls
+        ):
+            return setup
+        initial_seconds, increment_seconds = preset
+        return replace(
+            setup,
+            clock_settings=ClockSettings(
+                initial_seconds,
+                initial_seconds,
+                increment_seconds,
+                increment_seconds,
+            ),
+        )
 
     settings = setup.clock_settings
     values = {
