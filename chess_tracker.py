@@ -120,6 +120,23 @@ def square_change_scores(reference: np.ndarray, current: np.ndarray) -> dict[int
     return scores
 
 
+def board_looks_restored(scores: dict[int, float]) -> bool:
+    """
+    Recognize the last recorded position while tolerating one noisy square.
+
+    Reflections and tiny piece-placement differences can leave one square with
+    a moderate score after a piece is returned. A real displaced piece normally
+    changes either two squares or one square very strongly.
+    """
+    strongest = sorted(scores.values(), reverse=True)[:2]
+    if not strongest:
+        return True
+    if strongest[0] >= 12.0:
+        return False
+    second = strongest[1] if len(strongest) > 1 else 0.0
+    return strongest[0] + second < 13.5
+
+
 def confidence_for(ranked: list[RankedMove], scores: dict[int, float]) -> float:
     """Return a conservative 0..1 confidence for the top candidate."""
     if not ranked:
