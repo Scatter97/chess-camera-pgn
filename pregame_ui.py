@@ -9,7 +9,7 @@ from builtin_clock import ClockSettings
 
 
 SETUP_WIDTH = 1100
-SETUP_HEIGHT = 760
+SETUP_HEIGHT = 820
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class GameSetup:
     fast_mode: bool = False
     bullet_mode: bool = False
     accuracy_boost: bool = False
+    white_camera_edge: str = "bottom"
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
     manual_clock_switch: bool = False
@@ -429,20 +430,44 @@ def render_setup_screen(
     buttons.append(accuracy_button)
     draw_button(view, accuracy_button)
 
+    orientation_buttons = [
+        Button(
+            f"white_edge_{edge}",
+            edge.title(),
+            155 + index * 92,
+            642,
+            84,
+            42,
+            setup.white_camera_edge == edge,
+        )
+        for index, edge in enumerate(("bottom", "top", "left", "right"))
+    ]
+    draw_text(view, "White side", (42, 669), scale=0.48)
+    for button in orientation_buttons:
+        buttons.append(button)
+        draw_button(view, button)
+    draw_text(
+        view,
+        "Select where White appears in the camera image.",
+        (600, 669),
+        (165, 175, 190),
+        0.46,
+    )
+
     calibration_buttons = [
-        Button("calibrate_board", "Recalibrate board", 40, 680, 205, 48),
-        Button("calibrate_phone", "Recalibrate phone", 260, 680, 205, 48),
-        Button("verify_grid", "Check all 64 squares", 480, 680, 240, 48),
+        Button("calibrate_board", "Recalibrate board", 40, 750, 205, 48),
+        Button("calibrate_phone", "Recalibrate phone", 260, 750, 205, 48),
+        Button("verify_grid", "Check all 64 squares", 480, 750, 240, 48),
     ]
     for button in calibration_buttons:
         buttons.append(button)
         draw_button(view, button)
 
-    start_button = Button("start", "START GAME", 820, 670, 240, 58, active=True)
+    start_button = Button("start", "START GAME", 820, 740, 240, 58, active=True)
     buttons.append(start_button)
     draw_button(view, start_button)
     if message:
-        draw_text(view, message[:60], (600, 658), (120, 220, 255), 0.46)
+        draw_text(view, message[:60], (600, 712), (120, 220, 255), 0.46)
 
     return view, buttons
 
@@ -466,6 +491,10 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         )
     if action == "accuracy_toggle" and not setup.bullet_mode:
         return replace(setup, accuracy_boost=not setup.accuracy_boost)
+    if action.startswith("white_edge_"):
+        edge = action.removeprefix("white_edge_")
+        if edge in {"bottom", "top", "left", "right"}:
+            return replace(setup, white_camera_edge=edge)
     if action == "auto_toggle" and not setup.bullet_mode:
         return replace(setup, auto_accept=not setup.auto_accept)
     if action == "mapping_bottom":
