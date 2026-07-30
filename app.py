@@ -21,6 +21,7 @@ from clock_reader import (
 from chess_tracker import (
     BOARD_PIXELS,
     RankedMove,
+    analyze_frame_consensus,
     board_looks_restored,
     confidence_for,
     legal_move_fit,
@@ -58,6 +59,8 @@ VIRTUAL_VIEW_WIDTH = 620
 VIRTUAL_VIEW_HEIGHT = 620
 INFO_PANEL_WIDTH = 480
 CAMERA_PANEL_WIDTH = 300
+ACCURACY_FRAME_COUNT = 3
+ACCURACY_SAMPLE_INTERVAL = 0.06
 
 
 def put_text(
@@ -229,6 +232,46 @@ def draw_grid(board_image: np.ndarray, highlighted: set[int]) -> np.ndarray:
         cv2.line(view, (value, 0), (value, BOARD_PIXELS), (255, 255, 255), 1)
         cv2.line(view, (0, value), (BOARD_PIXELS, value), (255, 255, 255), 1)
     return view
+
+
+def render_grid_verification(board_image: np.ndarray) -> np.ndarray:
+    """Draw labels on all 64 calibrated squares for a pregame visual check."""
+    view = draw_grid(board_image, set())
+    for rank_from_top in range(8):
+        for file_index in range(8):
+            square_name = chess.square_name(
+                chess.square(file_index, 7 - rank_from_top)
+            )
+            x = file_index * 100 + 7
+            y = rank_from_top * 100 + 23
+            put_text(view, square_name, (x, y), (40, 245, 255), 0.45)
+    put_text(
+        view,
+        "Each piece must sit inside its labeled square. ENTER or ESC closes.",
+        (24, 785),
+        (255, 255, 255),
+        0.48,
+    )
+    return view
+
+
+def show_grid_verification(
+    capture: cv2.VideoCapture,
+    board_corners: list[list[float]],
+) -> None:
+    window = "Chess Camera - 64 Square Check"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 800, 820)
+    while True:
+        ok, raw = capture.read()
+        if ok:
+            board_view = warp_board(raw, board_corners)
+            labeled = render_grid_verification(board_view)
+            cv2.imshow(window, labeled)
+        key = cv2.waitKey(20) & 0xFF
+        if key in (10, 13, 27):
+            cv2.destroyWindow(window)
+            return
 
 
 def render_virtual_board(
@@ -703,6 +746,11 @@ def run_pregame_wizard(
             )
             message = "Phone calibration updated."
             continue
+        if action == "verify_grid":
+            focused_field = None
+            show_grid_verification(capture, board_corners)
+            message = "64-square grid checked."
+            continue
         if action == "start" or (key in (10, 13) and focused_field is None):
             save_config(
                 board_corners,
@@ -994,9 +1042,12 @@ def main() -> None:
         pending_index = 0
         pending_frame: np.ndarray | None = None
         pending_event_time: float | None = None
+        accuracy_frames: list[np.ndarray] = []
+        accuracy_last_sample = 0.0
         auto_accept = setup.auto_accept
         fast_mode = setup.fast_mode
         bullet_mode = setup.bullet_mode
+        accuracy_boost = setup.accuracy_boost
         clock_source = setup.clock_source
         manual_clock_switch = setup.manual_clock_switch
         builtin_settings = setup.clock_settings
@@ -1148,6 +1199,7 @@ def main() -> None:
                 pending.clear()
                 pending_frame = None
                 pending_event_time = None
+                accuracy_frames.clear()
                 manual_clock.reset()
                 illegal_warning = False
                 illegal_clock_side = None
@@ -1198,6 +1250,7 @@ def main() -> None:
                     stable_since = stable_since or now
                 else:
                     stable_since = None
+                    accuracy_frames.clear()
                     if not pending and not illegal_warning:
                         status = "Waiting for hands and pieces to stop moving..."
             previous = warped.copy()
@@ -1253,10 +1306,35 @@ def main() -> None:
                 )
                 if clock_boundary_ready:
                     bullet_capture_due = None
-                scores = square_change_scores(reference, warped)
+                consensus_result = None
+                analysis_deferred = False
+                if accuracy_boost and not illegal_warning:
+                    if now - accuracy_last_sample >= ACCURACY_SAMPLE_INTERVAL:
+                        accuracy_frames.append(warped.copy())
+                        accuracy_last_sample = now
+                    if len(accuracy_frames) < ACCURACY_FRAME_COUNT:
+                        status = (
+                            "Accuracy Boost: checking stable frame "
+                            f"{len(accuracy_frames)}/{ACCURACY_FRAME_COUNT}..."
+                        )
+                        analysis_deferred = True
+                        scores = {}
+                    else:
+                        consensus_result = analyze_frame_consensus(
+                            board,
+                            reference,
+                            accuracy_frames[:ACCURACY_FRAME_COUNT],
+                            LEGAL_FIT_THRESHOLD,
+                        )
+                        accuracy_frames.clear()
+                        scores = consensus_result.scores
+                else:
+                    scores = square_change_scores(reference, warped)
                 strongest_change = max(scores.values(), default=0.0)
 
-                if illegal_warning:
+                if analysis_deferred:
+                    pass
+                elif illegal_warning:
                     if board_looks_restored(scores):
                         illegal_warning = False
                         if clock_source == "builtin":
@@ -1273,8 +1351,25 @@ def main() -> None:
                             if clock_source == "builtin"
                             else "Board restored. You may now play a legal move."
                         )
+                elif (
+                    consensus_result is not None
+                    and consensus_result.move is None
+                    and (
+                        consensus_result.valid_votes > 0
+                        or consensus_result.ambiguous
+                    )
+                ):
+                    stable_since = None
+                    status = (
+                        "Camera reading was ambiguous. Keep the board still; "
+                        "Accuracy Boost is trying again."
+                    )
                 elif strongest_change >= MIN_CHANGE:
-                    ranked_moves = rank_legal_moves(board, scores)
+                    ranked_moves = (
+                        consensus_result.ranked
+                        if consensus_result is not None
+                        else rank_legal_moves(board, scores)
+                    )
                     best_fit = (
                         legal_move_fit(ranked_moves[0], scores) if ranked_moves else None
                     )
@@ -1310,9 +1405,17 @@ def main() -> None:
                         pass
                     else:
                         pending_index = 0
-                        pending_frame = warped.copy()
+                        pending_frame = (
+                            consensus_result.frame.copy()
+                            if consensus_result is not None
+                            else warped.copy()
+                        )
                         pending_event_time = analysis_event_time
-                        confidence = confidence_for(pending, scores)
+                        confidence = (
+                            consensus_result.confidence
+                            if consensus_result is not None
+                            else confidence_for(pending, scores)
+                        )
                         if pending:
                             candidate = pending[0].move
                             if candidate.promotion is not None:
@@ -1386,6 +1489,7 @@ def main() -> None:
                                 pending.clear()
                                 pending_frame = None
                                 pending_event_time = None
+                                accuracy_frames.clear()
                                 save_game(
                                     moves,
                                     move_clocks,
@@ -1485,7 +1589,8 @@ def main() -> None:
                 put_text(
                     panel,
                     f"{detection_mode_name} | "
-                    f"{'AUTO' if auto_accept else 'MANUAL'}",
+                    f"{'AUTO' if auto_accept else 'MANUAL'}"
+                    f"{' | ACC' if accuracy_boost else ''}",
                     (22, 172),
                     (120, 255, 170) if fast_mode else (175, 185, 200),
                     0.51,
@@ -1759,6 +1864,7 @@ def main() -> None:
                     auto_accept = setup.auto_accept
                     fast_mode = setup.fast_mode
                     bullet_mode = setup.bullet_mode
+                    accuracy_boost = setup.accuracy_boost
                     clock_source = setup.clock_source
                     manual_clock_switch = setup.manual_clock_switch
                     builtin_settings = setup.clock_settings
@@ -1769,6 +1875,7 @@ def main() -> None:
                     active_clock_side = None
                     last_active_clock_seen = 0.0
                     bullet_capture_due = None
+                    accuracy_frames.clear()
                     previous = None
                     start_pending = True
                     status = "Starting the configured game..."
@@ -1793,6 +1900,7 @@ def main() -> None:
                 pending.clear()
                 pending_frame = None
                 pending_event_time = None
+                accuracy_frames.clear()
                 illegal_warning = False
                 illegal_clock_side = None
                 save_game(
@@ -1878,6 +1986,7 @@ def main() -> None:
                     pending.clear()
                     pending_frame = None
                     pending_event_time = None
+                    accuracy_frames.clear()
                     save_game(
                         moves,
                         move_clocks,
