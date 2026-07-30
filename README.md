@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 22)
+# Physical Chess Camera → Timed PGN (Revision 23)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -217,6 +217,17 @@ outer margin. If the grid does not follow the board, close the check and click
 **Recalibrate board**.
 
 ## Illegal-move recovery
+
+Revision 23 adds a clickable **Dismiss warning** control to the red illegal-move
+screen. After returning the pieces to the last recorded position, click that
+button or press **Esc** or **X** if camera noise prevents the warning from
+closing automatically. Manual dismissal resynchronizes the camera to the
+restored physical position without recording a move or changing the app's
+logical chess position. The same player's built-in clock then resumes.
+
+Only dismiss the warning after the pieces have been restored. Dismissing it
+while the board still contains the illegal position would make that incorrect
+physical arrangement the new camera reference.
 
 Revision 14 pauses the built-in clock when the camera confirms an illegal
 position. Return the pieces to the last recorded position and leave the board
@@ -577,6 +588,7 @@ recalibrate only the phone.
 | U | Undo the last recorded move and resynchronize |
 | S | Open the pre-game setup for a new game |
 | A / B / C / F / G / K / T | Open pre-game setup (legacy shortcuts) |
+| Esc / X during an illegal warning | Dismiss the warning and resynchronize after restoring the pieces |
 | Esc | Finish and close |
 
 Every action above also has a clickable button or a clickable pre-game control,
