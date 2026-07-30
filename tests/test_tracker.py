@@ -27,6 +27,7 @@ from chess_tracker import (
     rank_legal_moves,
     write_pgn,
 )
+from game_rules import automatic_outcome, claimable_draw_reason
 from pregame_ui import (
     GameSetup,
     apply_setup_action,
@@ -286,3 +287,63 @@ def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
         chess.Move.from_uci("a7a8n")
     ) == 1
     assert chess.Move.from_uci("e1e2") in [candidate.move for candidate in selected]
+
+
+def test_checkmate_and_stalemate_outcomes() -> None:
+    checkmate = chess.Board()
+    for move in ["f2f3", "e7e5", "g2g4", "d8h4"]:
+        checkmate.push_uci(move)
+    outcome = automatic_outcome(checkmate)
+    assert outcome is not None
+    assert outcome.result == "0-1"
+    assert "Black wins" in outcome.message
+
+    stalemate = chess.Board("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+    outcome = automatic_outcome(stalemate)
+    assert outcome is not None
+    assert outcome.result == "1/2-1/2"
+    assert outcome.title == "Stalemate"
+
+
+def test_insufficient_material_is_automatic_draw() -> None:
+    board = chess.Board("8/8/8/8/8/8/7k/K7 w - - 0 1")
+    outcome = automatic_outcome(board)
+    assert outcome is not None
+    assert outcome.title == "Insufficient material"
+    assert outcome.result == "1/2-1/2"
+
+
+def test_threefold_claim_and_fivefold_automatic_draw() -> None:
+    board = chess.Board()
+    cycle = ["g1f3", "g8f6", "f3g1", "f6g8"]
+    for _ in range(2):
+        for move in cycle:
+            board.push_uci(move)
+    assert claimable_draw_reason(board) == "Threefold repetition"
+    assert automatic_outcome(board) is None
+
+    for _ in range(2):
+        for move in cycle:
+            board.push_uci(move)
+    outcome = automatic_outcome(board)
+    assert outcome is not None
+    assert outcome.title == "Fivefold repetition"
+
+
+def test_fifty_move_claim_and_seventy_five_move_automatic_draw() -> None:
+    claimable = chess.Board("8/8/8/8/8/8/R6k/K7 w - - 100 51")
+    assert claimable_draw_reason(claimable) == "50-move rule"
+    assert automatic_outcome(claimable) is None
+
+    automatic = chess.Board("8/8/8/8/8/8/R6k/K7 w - - 150 76")
+    outcome = automatic_outcome(automatic)
+    assert outcome is not None
+    assert outcome.title == "75-move rule"
+
+
+def test_pgn_writes_final_result(tmp_path: Path) -> None:
+    target = tmp_path / "finished_game.pgn"
+    write_pgn([], target, result="1/2-1/2")
+    text = target.read_text(encoding="utf-8")
+    assert '[Result "1/2-1/2"]' in text
+    assert text.rstrip().endswith("1/2-1/2")
