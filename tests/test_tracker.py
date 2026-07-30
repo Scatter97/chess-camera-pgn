@@ -7,6 +7,8 @@ import cv2
 import numpy as np
 
 from app import (
+    detection_profile,
+    frame_motion_score,
     manual_clock_player_for_key,
     pause_clock_for_illegal_move,
     render_virtual_board,
@@ -62,6 +64,18 @@ def test_virtual_board_tracks_position_and_last_move() -> None:
     moved_view = render_virtual_board(board, move)
     assert moved_view.shape == starting_view.shape
     assert not np.array_equal(starting_view, moved_view)
+
+
+def test_fast_detection_profile_and_reduced_motion_score() -> None:
+    assert detection_profile(False, False) == ("NORMAL", 1.15, 1.0)
+    assert detection_profile(True, False) == ("FAST", 0.35, 0.35)
+    assert detection_profile(False, True) == ("BULLET", 0.22, 0.18)
+
+    still = np.zeros((800, 800, 3), dtype=np.uint8)
+    changed = still.copy()
+    changed[200:600, 200:600] = 255
+    assert frame_motion_score(still, still) == 0.0
+    assert frame_motion_score(still, changed) > 1.6
 
 
 def test_background_clock_reader_returns_tagged_result() -> None:
@@ -264,6 +278,9 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = apply_setup_action(setup, "white_minus60")
     setup = apply_setup_action(setup, "black_plus10")
     setup = apply_setup_action(setup, "black_inc_plus")
+    setup = apply_setup_action(setup, "mode_fast")
+    assert setup.fast_mode
+    assert not setup.bullet_mode
     setup = apply_setup_action(setup, "mode_bullet")
     setup = apply_setup_action(setup, "clock_switch_manual")
 
@@ -272,6 +289,7 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     assert setup.clock_settings.black_initial_seconds == 310
     assert setup.clock_settings.black_increment_seconds == 1
     assert setup.bullet_mode
+    assert not setup.fast_mode
     assert setup.auto_accept
     assert setup.manual_clock_switch
 
