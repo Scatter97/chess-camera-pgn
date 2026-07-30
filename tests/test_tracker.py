@@ -58,10 +58,13 @@ from game_analysis import (
     save_analysis_report,
 )
 from pregame_ui import (
+    DEFAULT_PINNED_TIME_CONTROLS,
     GameSetup,
     apply_setup_action,
     clicked_action,
+    normalize_pinned_time_controls,
     render_setup_screen,
+    toggle_pinned_time_control,
     update_text_field,
 )
 
@@ -524,6 +527,39 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert clicked_action(buttons, engine.x + 5, engine.y + 5) == "select_engine"
 
 
+def test_pinned_time_control_applies_to_both_players() -> None:
+    setup = GameSetup(clock_source="builtin")
+
+    setup = apply_setup_action(setup, "apply_preset_3+2")
+
+    assert setup.clock_settings == ClockSettings(180, 180, 2, 2)
+
+
+def test_advanced_clocks_hide_preset_controls() -> None:
+    setup = GameSetup(clock_source="builtin", separate_time_controls=True)
+
+    _screen, buttons = render_setup_screen(setup, None)
+
+    assert not any(button.action == "choose_pinned_presets" for button in buttons)
+    assert not any(button.action.startswith("apply_preset_") for button in buttons)
+
+
+def test_pinned_preset_selection_is_known_unique_and_limited() -> None:
+    selected: tuple[str, ...] = ()
+    for label in ("1+0", "2+1", "3+0", "3+2", "5+0", "5+3", "10+0"):
+        selected = toggle_pinned_time_control(selected, label)
+
+    assert len(selected) == 6
+    assert "10+0" not in selected
+    assert toggle_pinned_time_control(selected, "3+0") == tuple(
+        label for label in selected if label != "3+0"
+    )
+    assert normalize_pinned_time_controls(["3+2", "bad", "3+2", "1+0"]) == (
+        "1+0",
+        "3+2",
+    )
+
+
 def test_board_profiles_persist_calibration_and_training(tmp_path: Path) -> None:
     store = BoardProfileStore(tmp_path / "profiles")
     profile = store.ensure_default(
@@ -695,6 +731,26 @@ def test_selected_engine_path_is_saved_in_config(
     )
     config = json.loads(config_path.read_text(encoding="utf-8"))
     assert config["engine_path"] == str(engine_path)
+    assert config["pinned_time_controls"] == list(DEFAULT_PINNED_TIME_CONTROLS)
+
+
+def test_pinned_time_controls_are_saved_in_config(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import app as app_module
+
+    config_path = tmp_path / "camera_config.json"
+    monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]
+    app_module.save_config(
+        [[0.0, 0.0]] * 4,
+        [[1.0, 1.0]] * 4,
+        True,
+        "bottom",
+        pinned_time_controls=("1+0", "3+2"),
+    )
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["pinned_time_controls"] == ["1+0", "3+2"]
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
