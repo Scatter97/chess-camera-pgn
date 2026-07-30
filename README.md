@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 28)
+# Physical Chess Camera → Timed PGN (Revision 29)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,22 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 29: correct a wrong automatic detection
+
+When automatic confirmation records the wrong legal move, click
+**Detection wrong** before another move is recorded. The app:
+
+1. removes that move from the virtual board and PGN;
+2. preserves the already-recorded move time and clock switch;
+3. shows alternative legal candidates for manual selection;
+4. records the chosen correction with stronger positive training; and
+5. returns to automatic confirmation for the following move.
+
+The rejected visual signature is saved as negative feedback for the incorrectly
+selected move. Correct high-confidence automatic moves continue to provide
+positive training. The correction button is enabled only for the latest
+automatically accepted move.
 
 ## Revision 28: built-in clock timeout
 
