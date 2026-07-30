@@ -11,7 +11,7 @@ import chess
 import cv2
 import numpy as np
 
-from builtin_clock import BuiltInChessClock, ClockSettings
+from builtin_clock import BuiltInChessClock, ClockSettings, ManualClockController
 from clock_reader import (
     BackgroundClockReader,
     BothClocks,
@@ -648,7 +648,7 @@ def run_pregame_wizard(
     """Run the clickable game-settings step after camera calibration."""
     window = "Chess Camera - Step 2: Game Settings"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 1100, 700)
+    cv2.resizeWindow(window, 1100, 760)
     current_buttons: list[Button] = []
     click_queue: list[str] = []
     focused_field: str | None = None
@@ -941,8 +941,10 @@ def main() -> None:
         auto_accept = setup.auto_accept
         bullet_mode = setup.bullet_mode
         clock_source = setup.clock_source
+        manual_clock_switch = setup.manual_clock_switch
         builtin_settings = setup.clock_settings
         builtin_clock = BuiltInChessClock(builtin_settings)
+        manual_clock = ManualClockController()
         illegal_warning = False
         status = "Game starting. Make White's first move."
         start_pending = True
@@ -1079,6 +1081,7 @@ def main() -> None:
                 pending.clear()
                 pending_frame = None
                 pending_event_time = None
+                manual_clock.reset()
                 illegal_warning = False
                 game_result = "*"
                 game_finished = False
@@ -1231,8 +1234,21 @@ def main() -> None:
                                 f"Candidate: {board.san(candidate)} "
                                 f"(confidence {confidence:.0%}). ENTER accepts; arrows change."
                             )
+                            manual_clock_ready = (
+                                clock_source != "builtin"
+                                or not manual_clock_switch
+                                or manual_clock.ready_for(board.turn)
+                            )
+                            if not manual_clock_ready:
+                                status = (
+                                    f"Candidate: {board.san(candidate)}. "
+                                    f"Press END {'WHITE' if board.turn else 'BLACK'} TURN."
+                                )
                             should_auto_accept = bullet_mode or (
                                 auto_accept and confidence >= AUTO_CONFIDENCE
+                            )
+                            should_auto_accept = (
+                                should_auto_accept and manual_clock_ready
                             )
                             if should_auto_accept:
                                 move_index = len(moves)
@@ -1255,14 +1271,25 @@ def main() -> None:
                                         ),
                                     )
                                 else:
-                                    move_clocks.append(
-                                        builtin_clock.complete_move(
-                                            board.turn, event_time
+                                    if manual_clock_switch:
+                                        move_clocks.append(
+                                            manual_clock.consume(board.turn)
                                         )
-                                    )
+                                    else:
+                                        move_clocks.append(
+                                            builtin_clock.complete_move(
+                                                board.turn, event_time
+                                            )
+                                        )
                                 board.push(candidate)
                                 moves.append(candidate)
-                                position_notice = evaluate_position(event_time)
+                                outcome_time = (
+                                    now
+                                    if clock_source == "builtin"
+                                    and manual_clock_switch
+                                    else event_time
+                                )
+                                position_notice = evaluate_position(outcome_time)
                                 reference = pending_frame.copy()
                                 pending.clear()
                                 pending_frame = None
@@ -1325,18 +1352,24 @@ def main() -> None:
 
             active_color = (120, 255, 170)
             idle_color = (185, 190, 200)
+            display_active_white = (
+                builtin_clock.active_white
+                if clock_source == "builtin"
+                and builtin_clock.active_white is not None
+                else board.turn
+            )
             put_text(
                 panel,
                 white_clock_text,
                 (22, 130),
-                active_color if board.turn else idle_color,
+                active_color if display_active_white else idle_color,
                 1.45,
             )
             put_text(
                 panel,
                 black_clock_text,
                 (250, 130),
-                active_color if not board.turn else idle_color,
+                active_color if not display_active_white else idle_color,
                 1.45,
             )
 
@@ -1357,7 +1390,11 @@ def main() -> None:
                     0.51,
                 )
             source_label = (
-                "BUILT-IN CLOCK"
+                (
+                    "BUILT-IN | PLAYER BUTTON"
+                    if manual_clock_switch
+                    else "BUILT-IN | CAMERA SWITCH"
+                )
                 if clock_source == "builtin"
                 else "LICHESS OCR CLOCK"
             )
@@ -1413,9 +1450,9 @@ def main() -> None:
                 (620, CAMERA_PANEL_WIDTH, 3), dtype=np.uint8
             )
             camera_panel[:] = (25, 28, 34)
-            camera_preview = cv2.resize(board_view, (280, 280))
-            camera_panel[:280, 10:290] = camera_preview
-            cv2.rectangle(camera_panel, (10, 0), (289, 279), (115, 125, 142), 2)
+            camera_preview = cv2.resize(board_view, (240, 240))
+            camera_panel[:240, 30:270] = camera_preview
+            cv2.rectangle(camera_panel, (30, 0), (269, 239), (115, 125, 142), 2)
             put_text(
                 camera_panel,
                 "SMALL CAMERA PREVIEW",
@@ -1426,19 +1463,32 @@ def main() -> None:
 
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
+            clock_button_enabled = (
+                clock_source == "builtin"
+                and manual_clock_switch
+                and not game_finished
+                and manual_clock.pending is None
+            )
+            if manual_clock.pending is not None:
+                clock_button_label = "CLOCK PRESSED - WAIT"
+            elif board.turn == chess.WHITE:
+                clock_button_label = "END WHITE TURN"
+            else:
+                clock_button_label = "END BLACK TURN"
             game_buttons = [
-                Button("accept", "ACCEPT MOVE", button_x, 292, 276, 42, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
-                Button("previous", "Previous", button_x, 344, 132, 38, enabled=bool(pending) and not game_finished),
-                Button("next", "Next", button_x + 144, 344, 132, 38, enabled=bool(pending) and not game_finished),
-                Button("promote_q", "Queen", button_x, 392, 132, 36, enabled=bool(pending) and not game_finished),
-                Button("promote_r", "Rook", button_x + 144, 392, 132, 36, enabled=bool(pending) and not game_finished),
-                Button("promote_b", "Bishop", button_x, 438, 132, 36, enabled=bool(pending) and not game_finished),
-                Button("promote_n", "Knight", button_x + 144, 438, 132, 36, enabled=bool(pending) and not game_finished),
-                Button("undo", "Undo", button_x, 486, 132, 38, enabled=bool(moves)),
-                Button("new_game", "New game", button_x + 144, 486, 132, 38),
-                Button("offer_draw", "Offer draw", button_x, 534, 132, 38, enabled=not game_finished),
-                Button("resign", "Resign", button_x + 144, 534, 132, 38, enabled=not game_finished),
-                Button("quit", "Finish & save", button_x, 582, 276, 30),
+                Button("clock_press", clock_button_label, button_x, 250, 276, 40, active=clock_button_enabled, enabled=clock_button_enabled),
+                Button("accept", "ACCEPT MOVE", button_x, 298, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
+                Button("previous", "Previous", button_x, 344, 132, 34, enabled=bool(pending) and not game_finished),
+                Button("next", "Next", button_x + 144, 344, 132, 34, enabled=bool(pending) and not game_finished),
+                Button("promote_q", "Queen", button_x, 386, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_r", "Rook", button_x + 144, 386, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_b", "Bishop", button_x, 426, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_n", "Knight", button_x + 144, 426, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("undo", "Undo", button_x, 466, 132, 34, enabled=bool(moves) or manual_clock.pending is not None),
+                Button("new_game", "New game", button_x + 144, 466, 132, 34),
+                Button("offer_draw", "Offer draw", button_x, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
+                Button("resign", "Resign", button_x + 144, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
+                Button("quit", "Finish & save", button_x, 552, 276, 30),
             ]
             for game_button in game_buttons:
                 draw_button(combined, game_button)
@@ -1462,6 +1512,17 @@ def main() -> None:
             if click_action in key_for_action:
                 key = key_for_action[click_action]
 
+            if click_action == "clock_press" and clock_button_enabled:
+                moving_white = board.turn == chess.WHITE
+                manual_clock.press(builtin_clock, moving_white, now)
+                status = (
+                    f"{'White' if moving_white else 'Black'} clock stopped. "
+                    "Waiting for the camera move."
+                )
+                if pending and (auto_accept or bullet_mode):
+                    key = 13
+                else:
+                    continue
             if click_action == "offer_draw" and not game_finished:
                 offering_white = board.turn == chess.WHITE
                 offerer = (
@@ -1530,6 +1591,7 @@ def main() -> None:
                 ord("k"),
                 ord("t"),
             ) and not (pending and key == ord("b")):
+                resume_clock_side = builtin_clock.active_white
                 if clock_source == "builtin":
                     builtin_clock.pause(now)
                 wizard_result = run_pregame_wizard(
@@ -1542,8 +1604,8 @@ def main() -> None:
                 cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
                 cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
                 if wizard_result is None:
-                    if clock_source == "builtin":
-                        builtin_clock.start(time.monotonic(), board.turn)
+                    if clock_source == "builtin" and resume_clock_side is not None:
+                        builtin_clock.start(time.monotonic(), resume_clock_side)
                     status = "Setup cancelled. Current game resumed."
                 else:
                     setup, board_corners, phone_corners = wizard_result
@@ -1551,8 +1613,10 @@ def main() -> None:
                     auto_accept = setup.auto_accept
                     bullet_mode = setup.bullet_mode
                     clock_source = setup.clock_source
+                    manual_clock_switch = setup.manual_clock_switch
                     builtin_settings = setup.clock_settings
                     builtin_clock.reset(builtin_settings)
+                    manual_clock.reset()
                     latest_clocks = None
                     last_clock_request = 0.0
                     active_clock_side = None
@@ -1561,7 +1625,12 @@ def main() -> None:
                     previous = None
                     start_pending = True
                     status = "Starting the configured game..."
-            elif key == ord("u") and moves:
+            elif key == ord("u") and (moves or manual_clock.pending is not None):
+                if manual_clock.pending is not None:
+                    manual_clock.cancel(builtin_clock, now)
+                    status = "Manual clock press cancelled."
+                    continue
+
                 moves.pop()
                 move_clocks.pop()
                 move_clock_tokens.pop()
@@ -1609,6 +1678,16 @@ def main() -> None:
             elif pending and key in (10, 13):
                 selected_move = pending[pending_index].move
                 if selected_move in board.legal_moves and pending_frame is not None:
+                    if (
+                        clock_source == "builtin"
+                        and manual_clock_switch
+                        and not manual_clock.ready_for(board.turn)
+                    ):
+                        status = (
+                            f"Press END {'WHITE' if board.turn else 'BLACK'} "
+                            "TURN before accepting the move."
+                        )
+                        continue
                     san = board.san(selected_move)
                     move_index = len(moves)
                     token = next_clock_token
@@ -1630,12 +1709,22 @@ def main() -> None:
                             ),
                         )
                     else:
-                        move_clocks.append(
-                            builtin_clock.complete_move(board.turn, event_time)
-                        )
+                        if manual_clock_switch:
+                            move_clocks.append(
+                                manual_clock.consume(board.turn)
+                            )
+                        else:
+                            move_clocks.append(
+                                builtin_clock.complete_move(board.turn, event_time)
+                            )
                     board.push(selected_move)
                     moves.append(selected_move)
-                    position_notice = evaluate_position(event_time)
+                    outcome_time = (
+                        now
+                        if clock_source == "builtin" and manual_clock_switch
+                        else event_time
+                    )
+                    position_notice = evaluate_position(outcome_time)
                     reference = pending_frame.copy()
                     pending.clear()
                     pending_frame = None
