@@ -20,6 +20,7 @@ from app import (
     most_used_values,
     normalize_usage_counts,
     pause_clock_for_illegal_move,
+    render_camera_panel,
     render_grid_verification,
     render_virtual_board,
     resume_clock_after_illegal_move,
@@ -88,6 +89,17 @@ def test_native_camera_backends() -> None:
     assert select_camera_backend("linux2") == cv2.CAP_V4L2
     assert select_camera_backend("win32") == cv2.CAP_DSHOW
     assert select_camera_backend("darwin") == cv2.CAP_AVFOUNDATION
+
+
+def test_camera_diagnostics_are_outside_the_preview() -> None:
+    board_view = np.full((300, 300, 3), (10, 20, 30), dtype=np.uint8)
+
+    panel = render_camera_panel(board_view, "NORMAL", 5.1, 0.5, False)
+
+    assert panel.shape == (620, 300, 3)
+    assert tuple(panel[100, 100]) == (10, 20, 30)
+    assert tuple(panel[29, 80]) == (80, 220, 120)
+    assert tuple(panel[29, 220]) == (20, 20, 20)
 
 
 def test_virtual_board_tracks_position_and_last_move() -> None:
