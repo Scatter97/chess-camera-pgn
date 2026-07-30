@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 10)
+# Physical Chess Camera → Timed PGN (Revision 11)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -36,7 +36,28 @@ diagnostic preview.
 
 The match screen has clickable buttons for accepting or cycling through move
 candidates, choosing a promotion piece, undoing, opening a new game's settings,
-and finishing/saving. Keyboard shortcuts remain available as backups.
+offering a draw, resigning, and finishing/saving. Keyboard shortcuts remain
+available as backups.
+
+## Game endings and draw rules
+
+Revision 11 detects and records completed-game results:
+
+- **Checkmate:** a popup says whether White or Black won.
+- **Stalemate:** an automatic draw popup appears.
+- **Insufficient material:** an automatic draw popup appears.
+- **Threefold repetition:** White and Black are asked separately whether they
+  agree to a draw. Both must select Yes.
+- **Fivefold repetition:** the game is declared an automatic draw.
+- **50-move rule:** White and Black are asked separately whether they agree to
+  a draw. Both must select Yes.
+- **75-move rule:** the game is declared an automatic draw.
+
+The built-in clock pauses while a draw or resignation confirmation is open.
+The **Offer draw** button asks the opponent to accept or decline. The
+**Resign** button asks the player whose turn it is to confirm, then awards the
+win to the opponent. The final `1-0`, `0-1`, or `1/2-1/2` result is saved in
+the PGN.
 
 It is designed for a camera beside the table, looking down at the board and
 phone at roughly 45°. Four clicked board corners create a square top-down board.
@@ -331,5 +352,6 @@ python -m venv .venv
 
 The main computer-vision and legal-move logic is in `chess_tracker.py`. Lichess
 clock OCR is in `clock_reader.py`. Built-in clock logic is in
-`builtin_clock.py`. Clickable setup components are in `pregame_ui.py`. The
-interface and camera loop are in `app.py`.
+`builtin_clock.py`. Chess-ending rules are in `game_rules.py`. Clickable setup
+components are in `pregame_ui.py`. The interface and camera loop are in
+`app.py`.
