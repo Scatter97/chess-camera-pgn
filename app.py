@@ -56,11 +56,13 @@ from pregame_ui import (
     DEFAULT_PINNED_TIME_CONTROLS,
     GameSetup,
     TIME_CONTROL_PRESETS,
+    apply_time_slider_value,
     apply_setup_action,
     clicked_action,
     draw_button,
     normalize_pinned_time_controls,
     render_setup_screen,
+    slider_value_from_x,
     toggle_pinned_time_control,
     update_text_field,
 )
@@ -1401,6 +1403,7 @@ def run_pregame_wizard(
     current_buttons: list[Button] = []
     click_queue: list[str] = []
     focused_field: str | None = None
+    active_slider_action: str | None = None
     message = ""
     setup = replace(
         setup,
@@ -1447,7 +1450,44 @@ def run_pregame_wizard(
     def on_mouse(
         event: int, x: int, y: int, _flags: int, _data: object
     ) -> None:
+        nonlocal setup, active_slider_action
+
+        def update_slider(action: str) -> None:
+            nonlocal setup
+            slider = next(
+                (
+                    button
+                    for button in current_buttons
+                    if button.action == action and button.enabled
+                ),
+                None,
+            )
+            if slider is None:
+                return
+            setup = apply_time_slider_value(
+                setup,
+                action,
+                slider_value_from_x(action, slider, x),
+            )
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            action = clicked_action(current_buttons, x, y)
+            if action is not None and action.startswith("slider_"):
+                active_slider_action = action
+                update_slider(action)
+            return
+        if (
+            event == cv2.EVENT_MOUSEMOVE
+            and active_slider_action is not None
+            and _flags & cv2.EVENT_FLAG_LBUTTON
+        ):
+            update_slider(active_slider_action)
+            return
         if event != cv2.EVENT_LBUTTONUP:
+            return
+        if active_slider_action is not None:
+            update_slider(active_slider_action)
+            active_slider_action = None
             return
         action = clicked_action(current_buttons, x, y)
         if action is not None:
