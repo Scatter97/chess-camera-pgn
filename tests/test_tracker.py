@@ -6,7 +6,11 @@ import chess.pgn
 import cv2
 import numpy as np
 
-from app import render_virtual_board, select_camera_backend
+from app import (
+    render_virtual_board,
+    select_camera_backend,
+    select_promotion_candidate,
+)
 from builtin_clock import BuiltInChessClock, ClockSettings
 from clock_reader import (
     BackgroundClockReader,
@@ -17,6 +21,7 @@ from clock_reader import (
     parse_clock_text,
 )
 from chess_tracker import (
+    RankedMove,
     legal_move_fit,
     move_changed_squares,
     rank_legal_moves,
@@ -258,3 +263,26 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert screen.shape == (700, 1100, 3)
     start = next(button for button in buttons if button.action == "start")
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
+
+
+def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
+    expected_squares = frozenset({chess.A7, chess.A8})
+    candidates = [
+        RankedMove(chess.Move.from_uci("a7a8q"), 20.0, expected_squares),
+        RankedMove(chess.Move.from_uci("a7a8r"), 20.0, expected_squares),
+        RankedMove(chess.Move.from_uci("a7a8b"), 20.0, expected_squares),
+        RankedMove(chess.Move.from_uci("a7a8n"), 20.0, expected_squares),
+        RankedMove(
+            chess.Move.from_uci("e1e2"),
+            4.0,
+            frozenset({chess.E1, chess.E2}),
+        ),
+    ]
+
+    selected = select_promotion_candidate(candidates, chess.KNIGHT)
+
+    assert selected[0].move == chess.Move.from_uci("a7a8n")
+    assert [candidate.move for candidate in selected].count(
+        chess.Move.from_uci("a7a8n")
+    ) == 1
+    assert chess.Move.from_uci("e1e2") in [candidate.move for candidate in selected]
