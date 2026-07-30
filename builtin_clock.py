@@ -57,6 +57,14 @@ class BuiltInChessClock:
             base -= max(0.0, now - self.started_at)
         return max(0.0, base)
 
+    def flagged_player(self, now: float) -> bool | None:
+        """Return the active player whose clock reached zero, if any."""
+        if self.active_white is None:
+            return None
+        if self.remaining(self.active_white, now) <= 0.0:
+            return self.active_white
+        return None
+
     def complete_move(self, player_is_white: bool, event_time: float) -> float:
         if self.active_white is None or self.started_at is None:
             self.start(event_time, player_is_white)
