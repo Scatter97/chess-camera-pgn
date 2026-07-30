@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -62,9 +63,24 @@ def put_text(
     )
 
 
+def select_camera_backend(platform_name: str | None = None) -> int:
+    """Choose the native camera backend for Windows, Ubuntu/Linux, or macOS."""
+    name = platform_name or sys.platform
+    if name.startswith("linux"):
+        return cv2.CAP_V4L2
+    if name.startswith("win"):
+        return cv2.CAP_DSHOW
+    if name == "darwin":
+        return cv2.CAP_AVFOUNDATION
+    return cv2.CAP_ANY
+
+
 def open_camera(index: int) -> cv2.VideoCapture:
-    backend = cv2.CAP_DSHOW if hasattr(cv2, "CAP_DSHOW") else cv2.CAP_ANY
+    backend = select_camera_backend()
     capture = cv2.VideoCapture(index, backend)
+    if not capture.isOpened() and backend != cv2.CAP_ANY:
+        capture.release()
+        capture = cv2.VideoCapture(index, cv2.CAP_ANY)
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
     if not capture.isOpened():
