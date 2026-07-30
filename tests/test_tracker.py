@@ -10,16 +10,20 @@ import numpy as np
 
 from board_profiles import BoardProfile, BoardProfileStore
 from app import (
+    apply_setup_suggestion,
     apply_midgame_clock_adjustment,
     detection_profile,
     frame_motion_score,
     illegal_warning_button,
     manual_correction_candidates,
     manual_clock_player_for_key,
+    most_used_values,
+    normalize_usage_counts,
     pause_clock_for_illegal_move,
     render_grid_verification,
     render_virtual_board,
     resume_clock_after_illegal_move,
+    remember_used_value,
     select_camera_backend,
     select_promotion_candidate,
 )
@@ -582,6 +586,50 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert clicked_action(buttons, train.x + 5, train.y + 5) == "profile_train"
     engine = next(button for button in buttons if button.action == "select_engine")
     assert clicked_action(buttons, engine.x + 5, engine.y + 5) == "select_engine"
+    rename = next(button for button in buttons if button.action == "profile_rename")
+    reset = next(
+        button for button in buttons if button.action == "profile_reset_training"
+    )
+    swap = next(button for button in buttons if button.action == "swap_players")
+    assert rename.label == "Rename preset"
+    assert reset.label == "Reset training"
+    assert swap.label == "Swap sides"
+
+
+def test_player_swap_and_editable_suggestions() -> None:
+    setup = GameSetup(white_name="Alice", black_name="Bob", event_name="")
+    setup = apply_setup_action(setup, "swap_players")
+    assert setup.white_name == "Bob"
+    assert setup.black_name == "Alice"
+
+    setup = apply_setup_suggestion(
+        setup,
+        "suggest_event_0",
+        ("Alice", "Bob"),
+        ("Club night",),
+    )
+    setup = update_text_field(setup, "event", ord("!"))
+    assert setup.event_name == "Club night!"
+
+    _screen, buttons = render_setup_screen(
+        setup,
+        "white",
+        player_suggestions=("Alice", "Bob"),
+        event_suggestions=("Club night",),
+    )
+    assert any(button.action == "suggest_white_0" for button in buttons)
+    assert not any(button.action == "suggest_event_0" for button in buttons)
+
+
+def test_usage_counts_make_most_used_local_suggestions() -> None:
+    counts = normalize_usage_counts(
+        {" Bob ": 2, "Alice": 4, "Invalid": 0, 3: 5, "Bad": "x"}
+    )
+    remember_used_value(counts, " Bob ")
+    remember_used_value(counts, "Carol")
+
+    assert counts == {"Bob": 3, "Alice": 4, "Carol": 1}
+    assert most_used_values(counts, 2) == ("Alice", "Bob")
 
 
 def test_pinned_time_control_applies_to_both_players() -> None:
@@ -658,6 +706,71 @@ def test_board_profiles_persist_calibration_and_training(tmp_path: Path) -> None
     assert reloaded.sample_count == 3
     assert reloaded.move_patterns["e2e4"].mean_scores[chess.E2] == 1.0
     assert reloaded.noise_mean[chess.A1] == 4.0
+
+
+def test_board_profile_can_be_renamed_without_losing_data(tmp_path: Path) -> None:
+    store = BoardProfileStore(tmp_path / "profiles")
+    profile = store.ensure_default(
+        board_corners=[[1.0, 2.0]] * 4,
+        white_camera_edge="right",
+    )
+    old_path = store.directory / "Default-board.json"
+
+    store.rename(profile, "Tournament board")
+
+    assert profile.name == "Tournament board"
+    assert not old_path.exists()
+    assert (store.directory / "Tournament-board.json").exists()
+    reloaded = BoardProfileStore(store.directory).load()[0]
+    assert reloaded.board_corners == [[1.0, 2.0]] * 4
+    assert reloaded.white_camera_edge == "right"
+
+
+def test_board_profile_rename_rejects_empty_and_duplicate_names(
+    tmp_path: Path,
+) -> None:
+    store = BoardProfileStore(tmp_path / "profiles")
+    first = store.ensure_default()
+    second = store.create_from(first)
+
+    for invalid_name in ("", "  ", second.name.upper()):
+        try:
+            store.rename(first, invalid_name)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Expected rename to reject {invalid_name!r}")
+    assert first.name == "Default board"
+
+
+def test_reset_training_preserves_board_preset_calibration() -> None:
+    corners = [[1.0, 2.0]] * 4
+    phone = [[3.0, 4.0]] * 4
+    profile = BoardProfile(
+        "Keep calibration",
+        board_corners=corners,
+        phone_corners=phone,
+        white_camera_edge="left",
+        bottom_clock_is_white=False,
+    )
+    move = chess.Move.from_uci("e2e4")
+    scores = blank_scores()
+    scores[chess.E2] = 20.0
+    scores[chess.E4] = 18.0
+    profile.observe_move(move, scores, {chess.E2, chess.E4})
+    profile.observe_rejection(move, scores)
+
+    profile.reset_training()
+
+    assert profile.sample_count == 0
+    assert profile.move_patterns == {}
+    assert profile.rejected_patterns == {}
+    assert profile.noise_mean == [0.0] * 64
+    assert profile.noise_count == [0] * 64
+    assert profile.board_corners == corners
+    assert profile.phone_corners == phone
+    assert profile.white_camera_edge == "left"
+    assert not profile.bottom_clock_is_white
 
 
 def test_learned_move_signature_breaks_an_ambiguous_ranking() -> None:
@@ -876,6 +989,27 @@ def test_pinned_time_controls_are_saved_in_config(
 
     config = json.loads(config_path.read_text(encoding="utf-8"))
     assert config["pinned_time_controls"] == ["1+0", "3+2"]
+
+
+def test_player_and_event_suggestions_are_saved_in_config(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    import app as app_module
+
+    config_path = tmp_path / "camera_config.json"
+    monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]
+    app_module.save_config(
+        [[0.0, 0.0]] * 4,
+        [[1.0, 1.0]] * 4,
+        True,
+        "bottom",
+        player_name_usage={"Alice": 3, "Bob": 2},
+        event_name_usage={"Club night": 4},
+    )
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["player_name_usage"] == {"Alice": 3, "Bob": 2}
+    assert config["event_name_usage"] == {"Club night": 4}
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
