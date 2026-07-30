@@ -83,6 +83,13 @@ class BoardProfile:
             if pattern.count > 0
         }
 
+    def reset_training(self) -> None:
+        """Clear learned move data without changing this board's calibration."""
+        self.move_patterns.clear()
+        self.rejected_patterns.clear()
+        self.noise_mean = [0.0] * 64
+        self.noise_count = [0] * 64
+
     def adjusted_scores(
         self, scores: dict[chess.Square, float]
     ) -> dict[chess.Square, float]:
@@ -274,3 +281,30 @@ class BoardProfileStore:
         self.directory.mkdir(parents=True, exist_ok=True)
         path = self.directory / f"{_safe_filename(profile.name)}.json"
         path.write_text(json.dumps(profile.to_dict(), indent=2), encoding="utf-8")
+
+    def rename(self, profile: BoardProfile, new_name: str) -> None:
+        """Rename a profile and its file, rejecting empty or duplicate names."""
+        cleaned = new_name.strip()
+        if not cleaned:
+            raise ValueError("Board preset name cannot be empty.")
+        if any(
+            other is not profile and other.name.casefold() == cleaned.casefold()
+            for other in self.profiles
+        ):
+            raise ValueError(f'A board preset named "{cleaned}" already exists.')
+
+        old_name = profile.name
+        old_path = self.directory / f"{_safe_filename(old_name)}.json"
+        new_path = self.directory / f"{_safe_filename(cleaned)}.json"
+        if new_path != old_path and new_path.exists():
+            raise ValueError(
+                "That name would use the same file as another board preset."
+            )
+        profile.name = cleaned
+        try:
+            self.save(profile)
+        except OSError:
+            profile.name = old_name
+            raise
+        if new_path != old_path and old_path.exists():
+            old_path.unlink()
