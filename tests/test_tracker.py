@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from app import render_virtual_board, select_camera_backend
+from builtin_clock import BuiltInChessClock, ClockSettings
 from clock_reader import (
     BackgroundClockReader,
     BothClocks,
@@ -169,3 +170,39 @@ def test_pgn_contains_per_move_clocks(tmp_path: Path) -> None:
     text = target.read_text(encoding="utf-8")
     assert "[%clk 0:00:59]" in text
     assert "[%clk 0:00:58.4]" in text
+
+
+def test_builtin_clock_supports_asymmetric_time_and_increment() -> None:
+    clock = BuiltInChessClock(
+        ClockSettings(
+            white_initial_seconds=60,
+            black_initial_seconds=120,
+            white_increment_seconds=2,
+            black_increment_seconds=5,
+        )
+    )
+    clock.start(100.0)
+
+    assert clock.complete_move(True, 110.0) == 52.0
+    assert clock.remaining(False, 120.0) == 110.0
+    assert clock.complete_move(False, 125.0) == 110.0
+    assert clock.remaining(True, 130.0) == 47.0
+
+
+def test_builtin_clock_undo_restores_movers_clock() -> None:
+    clock = BuiltInChessClock(
+        ClockSettings(
+            white_initial_seconds=60,
+            black_initial_seconds=120,
+            white_increment_seconds=2,
+            black_increment_seconds=5,
+        )
+    )
+    clock.start(100.0)
+    clock.complete_move(True, 110.0)
+    clock.complete_move(False, 125.0)
+
+    assert clock.undo(130.0)
+    assert clock.active_white is False
+    assert clock.remaining(False, 130.0) == 105.0
+    assert clock.remaining(True, 130.0) == 52.0
