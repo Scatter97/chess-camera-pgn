@@ -14,6 +14,7 @@ from app import (
     detection_profile,
     frame_motion_score,
     illegal_warning_button,
+    manual_correction_candidates,
     manual_clock_player_for_key,
     pause_clock_for_illegal_move,
     render_grid_verification,
@@ -668,6 +669,58 @@ def test_learned_move_signature_breaks_an_ambiguous_ranking() -> None:
     ranked = rank_legal_moves(board, scores, {"e2e4": pattern})
 
     assert ranked[0].move == chess.Move.from_uci("e2e4")
+
+
+def test_rejected_signature_penalizes_the_wrong_move() -> None:
+    board = chess.Board()
+    scores = blank_scores()
+    scores[chess.E2] = 22.0
+    scores[chess.E3] = 18.0
+    scores[chess.E4] = 18.0
+    rejected = [0.0] * 64
+    rejected[chess.E2] = 1.0
+    rejected[chess.E4] = 0.95
+
+    ranked = rank_legal_moves(board, scores, None, {"e2e4": rejected})
+
+    assert ranked[0].move != chess.Move.from_uci("e2e4")
+
+
+def test_manual_correction_keeps_rejected_move_as_last_choice() -> None:
+    board = chess.Board()
+    scores = blank_scores()
+    scores[chess.E2] = 24.0
+    scores[chess.E4] = 22.0
+    rejected_move = chess.Move.from_uci("e2e4")
+    profile = BoardProfile("Correction")
+    profile.observe_rejection(rejected_move, scores)
+
+    candidates = manual_correction_candidates(
+        board,
+        scores,
+        rejected_move,
+        profile,
+    )
+
+    assert candidates
+    assert candidates[-1].move == rejected_move
+    assert candidates[0].move != rejected_move
+
+
+def test_rejected_patterns_persist_with_board_profile(tmp_path: Path) -> None:
+    store = BoardProfileStore(tmp_path / "profiles")
+    profile = store.ensure_default()
+    move = chess.Move.from_uci("e2e4")
+    scores = blank_scores()
+    scores[chess.E2] = 20.0
+    scores[chess.E4] = 18.0
+    profile.observe_rejection(move, scores, weight=3)
+    store.save(profile)
+
+    reloaded = BoardProfileStore(tmp_path / "profiles").load()[0]
+
+    assert reloaded.rejected_patterns["e2e4"].count == 3
+    assert reloaded.rejected_patterns["e2e4"].mean_scores[chess.E2] == 1.0
 
 
 def test_profile_learning_can_be_disabled() -> None:
