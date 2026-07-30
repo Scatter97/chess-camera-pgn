@@ -318,7 +318,7 @@ def render_setup_screen(
                 ),
                 Button(
                     "clock_switch_manual",
-                    "Player button",
+                    "Player keys A / L",
                     345,
                     588,
                     175,
