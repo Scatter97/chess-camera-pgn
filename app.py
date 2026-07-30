@@ -889,14 +889,14 @@ def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
     cv2.rectangle(
         view,
         (35, center_y - 115),
-        (width - 35, center_y + 105),
+        (width - 35, center_y + 175),
         (0, 0, 110),
         -1,
     )
     cv2.rectangle(
         view,
         (35, center_y - 115),
-        (width - 35, center_y + 105),
+        (width - 35, center_y + 175),
         (255, 255, 255),
         4,
     )
@@ -920,7 +920,21 @@ def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
         2,
         cv2.LINE_AA,
     )
+    draw_button(view, illegal_warning_button(width, height))
     return view
+
+
+def illegal_warning_button(width: int, height: int) -> Button:
+    """Return the clickable manual-recovery button for an illegal warning."""
+    return Button(
+        "dismiss_illegal",
+        "DISMISS WARNING (ESC / X)",
+        max(20, width // 2 - 165),
+        height // 2 + 95,
+        330,
+        54,
+        active=True,
+    )
 
 
 def select_promotion_candidate(
@@ -2390,6 +2404,10 @@ def main() -> None:
                 ),
                 Button("quit", "Finish & save", button_x + 144, 552, 132, 34),
             ]
+            if illegal_warning:
+                game_buttons.append(
+                    illegal_warning_button(combined.shape[1], combined.shape[0])
+                )
             for game_button in game_buttons:
                 draw_button(combined, game_button)
             if illegal_warning:
@@ -2411,6 +2429,35 @@ def main() -> None:
             }
             if click_action in key_for_action:
                 key = key_for_action[click_action]
+
+            if illegal_warning and (
+                click_action == "dismiss_illegal" or key in (27, ord("x"))
+            ):
+                # Manual recovery is for cases where the physical position has
+                # been restored but camera noise prevents the automatic check.
+                # Re-baseline on the current image without changing the logical
+                # chess position or recording a move.
+                reference = warped.copy()
+                previous = warped.copy()
+                stable_since = None
+                accuracy_frames.clear()
+                illegal_warning = False
+                last_accept_time = now
+                if clock_source == "builtin":
+                    resume_clock_after_illegal_move(
+                        builtin_clock,
+                        illegal_clock_side,
+                        now,
+                    )
+                illegal_clock_side = None
+                status = (
+                    "Illegal warning dismissed and camera resynchronized. "
+                    "The clock resumed."
+                    if clock_source == "builtin"
+                    else
+                    "Illegal warning dismissed and camera resynchronized."
+                )
+                continue
 
             if click_action == "review":
                 if game_review is None:
