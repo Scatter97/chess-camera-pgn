@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 31)
+# Physical Chess Camera → Timed PGN (Revision 32)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,17 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 32: button text fitting
+
+Long button labels, including **Detection wrong**, now automatically use a
+slightly smaller font when needed so the text remains inside the button at
+different display scales.
+
+The green bar above the small camera preview is a board-stability timer, not an
+accuracy or confidence score. It fills while the board remains still and resets
+when movement is detected. A full bar means the selected Normal, Fast, or
+Bullet stability delay has passed and the position is ready for analysis.
 
 ## Revision 31: named presets and quicker game setup
 
