@@ -128,8 +128,19 @@ def test_accuracy_consensus_finds_move_across_lighting_changes() -> None:
         dtype=np.uint8,
     )
     changed = reference.copy()
-    changed[675:775, 475:575] = (245, 20, 210)  # e2
-    changed[475:575, 475:575] = (245, 20, 210)  # e4
+    e_file_start = BOARD_MARGIN_PIXELS + 4 * 100
+    e2_rank_start = BOARD_MARGIN_PIXELS + 6 * 100
+    e4_rank_start = BOARD_MARGIN_PIXELS + 4 * 100
+    changed[e2_rank_start : e2_rank_start + 100, e_file_start : e_file_start + 100] = (
+        245,
+        20,
+        210,
+    )
+    changed[e4_rank_start : e4_rank_start + 100, e_file_start : e_file_start + 100] = (
+        245,
+        20,
+        210,
+    )
     frames = [
         np.clip(changed.astype(np.int16) + offset, 0, 255).astype(np.uint8)
         for offset in (-7, 0, 9)
