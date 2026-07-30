@@ -3,4 +3,5 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 camera_config.json
+board_profiles/
 games/
