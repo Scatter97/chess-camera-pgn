@@ -13,16 +13,20 @@ from app import (
     apply_setup_suggestion,
     apply_midgame_clock_adjustment,
     detection_profile,
+    ensure_review_move_visible,
+    evaluation_bar_fraction,
     frame_motion_score,
     illegal_warning_button,
     manual_correction_candidates,
     manual_clock_player_for_key,
+    mouse_wheel_direction,
     most_used_values,
     normalize_usage_counts,
     pause_clock_for_illegal_move,
     render_camera_panel,
     render_grid_verification,
     render_virtual_board,
+    review_scroll_start,
     resume_clock_after_illegal_move,
     remember_used_value,
     select_camera_backend,
@@ -607,7 +611,7 @@ def test_pregame_text_fields_and_click_targets() -> None:
     swap = next(button for button in buttons if button.action == "swap_players")
     assert rename.label == "Rename preset"
     assert reset.label == "Reset training"
-    assert swap.label == "Swap sides"
+    assert swap.label == ""
 
 
 def test_long_button_label_is_drawn_inside_its_box() -> None:
@@ -647,6 +651,22 @@ def test_player_swap_and_editable_suggestions() -> None:
     )
     assert any(button.action == "suggest_white_0" for button in buttons)
     assert not any(button.action == "suggest_event_0" for button in buttons)
+
+
+def test_long_suggestion_background_adapts_to_its_text() -> None:
+    suggestion = "Camera-recorded game"
+    _screen, buttons = render_setup_screen(
+        GameSetup(),
+        "event",
+        event_suggestions=(suggestion,),
+    )
+
+    dropdown = next(
+        button for button in buttons if button.action == "suggest_event_0"
+    )
+    assert dropdown.label == suggestion
+    assert dropdown.width > 112
+    assert dropdown.x + dropdown.width <= 530
 
 
 def test_usage_counts_make_most_used_local_suggestions() -> None:
@@ -940,6 +960,10 @@ def test_game_review_totals_and_json_export(tmp_path: Path) -> None:
     assert review.black_accuracy > 80
     assert review.moves[0].classification == "Best"
     assert review.moves[1].classification == "Best"
+    assert review.moves[0].evaluation_after_white == 25
+    assert review.moves[1].evaluation_after_white == 20
+    assert review.white_average_centipawn_loss == 5.0
+    assert review.black_average_centipawn_loss == 0.0
 
     target = tmp_path / "analysis.json"
     save_analysis_report(review, target)
@@ -947,6 +971,33 @@ def test_game_review_totals_and_json_export(tmp_path: Path) -> None:
     assert '"engine_name": "Testfish"' in text
     assert '"white_accuracy"' in text
     assert '"white_counts"' in text
+    assert '"white_average_centipawn_loss": 5.0' in text
+
+
+def test_review_evaluation_bar_and_scroll_helpers() -> None:
+    assert evaluation_bar_fraction(0, None) == 0.5
+    assert evaluation_bar_fraction(300, None) > 0.5
+    assert evaluation_bar_fraction(-300, None) < 0.5
+    assert evaluation_bar_fraction(0, 2) == 1.0
+    assert evaluation_bar_fraction(0, -2) == 0.0
+
+    assert review_scroll_start(0, 20, 3) == 3
+    assert review_scroll_start(15, 20, 3) == 11
+    assert ensure_review_move_visible(12, 0, 20) == 4
+    assert ensure_review_move_visible(2, 5, 20) == 2
+    assert mouse_wheel_direction(120 << 16) == 1
+    assert mouse_wheel_direction((-120 & 0xFFFF) << 16) == -1
+
+
+def test_virtual_review_board_draws_stockfish_suggestion() -> None:
+    board = chess.Board()
+    without_suggestion = render_virtual_board(board)
+    with_suggestion = render_virtual_board(
+        board,
+        suggested_move=chess.Move.from_uci("e2e4"),
+    )
+
+    assert not np.array_equal(without_suggestion, with_suggestion)
 
 
 def test_stockfish_path_can_be_supplied_explicitly(tmp_path: Path) -> None:
