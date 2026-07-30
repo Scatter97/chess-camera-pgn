@@ -1,6 +1,6 @@
-# Physical Chess Camera → Timed PGN (Revision 18)
+# Physical Chess Camera (Beta v0.18)
 
-This Windows/laptop app watches a normal physical chess game and a Lichess
+This Windows/Ubuntu app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
 player's remaining time as a PGN file. The clock can come from Lichess OCR or
 from a configurable clock built into the app.
