@@ -95,6 +95,23 @@ def find_stockfish(explicit_path: str | None = None) -> Path | None:
     return None
 
 
+def probe_uci_engine(engine_path: Path) -> str:
+    """Start an executable briefly and return its reported UCI engine name."""
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(str(engine_path), timeout=5.0)
+    except (OSError, TimeoutError, chess.engine.EngineError) as error:
+        raise AnalysisUnavailable(
+            f"The selected file is not a working UCI chess engine: {error}"
+        ) from error
+    try:
+        return str(engine.id.get("name", engine_path.name))
+    finally:
+        try:
+            engine.quit()
+        except (chess.engine.EngineError, chess.engine.EngineTerminatedError):
+            pass
+
+
 def move_accuracy(centipawn_loss: int) -> float:
     """Convert centipawn loss to a transparent 0–100 accuracy estimate."""
     loss = max(0, min(1200, int(centipawn_loss)))
