@@ -28,6 +28,7 @@ class GameSetup:
     profile_name: str = "Default board"
     profile_samples: int = 0
     learning_enabled: bool = True
+    engine_name: str = "Auto-detect"
     clock_settings: ClockSettings = ClockSettings()
 
     def pgn_headers(self) -> dict[str, str]:
@@ -483,6 +484,23 @@ def render_setup_screen(
     for button in profile_buttons:
         buttons.append(button)
         draw_button(view, button)
+    draw_text(
+        view,
+        f"Engine: {setup.engine_name[:22]}",
+        (855, 706),
+        (120, 220, 255),
+        0.40,
+    )
+    engine_button = Button(
+        "select_engine",
+        "Choose engine...",
+        855,
+        722,
+        205,
+        42,
+    )
+    buttons.append(engine_button)
+    draw_button(view, engine_button)
     draw_text(
         view,
         "Profiles keep separate calibration and learn from confirmed moves.",
