@@ -2,7 +2,9 @@ from pathlib import Path
 
 import chess
 import chess.pgn
+import cv2
 
+from app import select_camera_backend
 from clock_reader import format_pgn_clock, parse_clock_text
 from chess_tracker import (
     legal_move_fit,
@@ -14,6 +16,13 @@ from chess_tracker import (
 
 def blank_scores() -> dict[int, float]:
     return {square: 0.0 for square in chess.SQUARES}
+
+
+def test_native_camera_backends() -> None:
+    assert select_camera_backend("linux") == cv2.CAP_V4L2
+    assert select_camera_backend("linux2") == cv2.CAP_V4L2
+    assert select_camera_backend("win32") == cv2.CAP_DSHOW
+    assert select_camera_backend("darwin") == cv2.CAP_AVFOUNDATION
 
 
 def test_normal_move_changes_two_squares() -> None:
