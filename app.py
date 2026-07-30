@@ -42,6 +42,14 @@ from chess_tracker import (
     write_pgn,
 )
 from game_rules import GameOutcome, automatic_outcome, claimable_draw_reasons
+from game_analysis import (
+    DEFAULT_ANALYSIS_SECONDS,
+    AnalysisUnavailable,
+    GameReview,
+    analyze_game,
+    find_stockfish,
+    save_analysis_report,
+)
 from pregame_ui import (
     Button,
     GameSetup,
@@ -557,6 +565,251 @@ def render_virtual_board(
 
     put_text(canvas, state, (left + 230, 610), state_color, 0.56)
     return canvas
+
+
+ANALYSIS_COLORS = {
+    "Brilliant": (235, 170, 80),
+    "Best": (105, 210, 105),
+    "Excellent": (130, 220, 150),
+    "Good": (165, 205, 170),
+    "Inaccuracy": (70, 210, 245),
+    "Mistake": (40, 145, 245),
+    "Blunder": (70, 70, 235),
+    "Miss": (180, 90, 225),
+}
+
+
+def show_analysis_progress(current: int, total: int) -> None:
+    window = "Stockfish post-game analysis"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 680, 240)
+    view = np.zeros((240, 680, 3), dtype=np.uint8)
+    view[:] = (28, 31, 37)
+    put_text(view, "Analyzing game locally...", (32, 58), (100, 220, 255), 0.85)
+    completed = min(total, max(0, current))
+    percentage = completed / max(1, total)
+    put_text(
+        view,
+        f"Position {completed}/{total}  ({percentage:.0%})",
+        (32, 108),
+        scale=0.58,
+    )
+    cv2.rectangle(view, (32, 145), (648, 176), (55, 60, 70), -1)
+    cv2.rectangle(
+        view,
+        (32, 145),
+        (32 + int(616 * percentage), 176),
+        (70, 190, 110),
+        -1,
+    )
+    put_text(
+        view,
+        "Camera detection and clocks are no longer running.",
+        (32, 215),
+        (160, 170, 185),
+        0.46,
+    )
+    cv2.imshow(window, view)
+    cv2.waitKey(1)
+
+
+def _analysis_eval_text(centipawns: int, mate: int | None) -> str:
+    if mate is not None:
+        return f"Mate {abs(mate)} for {'mover' if mate > 0 else 'opponent'}"
+    sign = "+" if centipawns >= 0 else ""
+    return f"{sign}{centipawns / 100:.2f}"
+
+
+def show_game_review(
+    review: GameReview,
+    moves: list[chess.Move],
+    white_name: str,
+    black_name: str,
+) -> None:
+    window = "Chess Camera - Post-game Review"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 1220, 720)
+    current = 0
+    click_queue: list[str] = []
+    buttons: list[Button] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        selected = review.moves[current]
+        board = chess.Board()
+        for move in moves[: current + 1]:
+            board.push(move)
+        board_view = render_virtual_board(board, moves[current])
+        view = np.zeros((720, 1220, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        view[50:670, 20:640] = board_view
+
+        put_text(view, "Post-game Review", (675, 42), (100, 220, 255), 0.9)
+        put_text(
+            view,
+            f"{white_name or 'White'} accuracy: {review.white_accuracy:.1f}%",
+            (675, 82),
+            (235, 235, 240),
+            0.52,
+        )
+        put_text(
+            view,
+            f"{black_name or 'Black'} accuracy: {review.black_accuracy:.1f}%",
+            (675, 110),
+            (185, 190, 200),
+            0.52,
+        )
+        put_text(
+            view,
+            f"{selected.move_number}{'.' if selected.white else '...'} "
+            f"{selected.san}  -  {selected.classification}",
+            (675, 154),
+            ANALYSIS_COLORS.get(selected.classification, (235, 235, 235)),
+            0.73,
+        )
+        put_text(
+            view,
+            f"Move accuracy {selected.accuracy:.1f}% | "
+            f"loss {selected.centipawn_loss} cp | "
+            f"eval {_analysis_eval_text(selected.evaluation_after, selected.mate_after)}",
+            (675, 190),
+            (185, 195, 210),
+            0.48,
+        )
+        best_text = (
+            f"Engine preferred {selected.best_move_san} "
+            f"({selected.best_move_uci})"
+            if selected.best_move_san and selected.best_move_uci != selected.uci
+            else "Played an engine-best move."
+        )
+        put_text(view, best_text[:57], (675, 220), (120, 220, 255), 0.48)
+
+        white_counts = review.classification_counts(chess.WHITE)
+        black_counts = review.classification_counts(chess.BLACK)
+        count_order = [
+            "Brilliant",
+            "Best",
+            "Excellent",
+            "Good",
+            "Inaccuracy",
+            "Mistake",
+            "Blunder",
+            "Miss",
+        ]
+        for row, label in enumerate(count_order):
+            y = 266 + row * 31
+            put_text(
+                view,
+                label,
+                (675, y),
+                ANALYSIS_COLORS[label],
+                0.48,
+            )
+            put_text(view, str(white_counts.get(label, 0)), (835, y), scale=0.48)
+            put_text(view, str(black_counts.get(label, 0)), (895, y), scale=0.48)
+        put_text(view, "W", (835, 244), (235, 235, 240), 0.45)
+        put_text(view, "B", (895, 244), (185, 190, 200), 0.45)
+
+        start = max(0, min(current - 4, len(review.moves) - 9))
+        visible = review.moves[start : start + 9]
+        put_text(view, "Move list", (975, 254), (100, 220, 255), 0.55)
+        for row, move_review in enumerate(visible):
+            index = start + row
+            y = 286 + row * 33
+            if index == current:
+                cv2.rectangle(view, (965, y - 23), (1198, y + 7), (55, 65, 72), -1)
+            prefix = f"{move_review.move_number}{'.' if move_review.white else '...'}"
+            put_text(
+                view,
+                f"{prefix} {move_review.san[:8]}",
+                (975, y),
+                scale=0.46,
+            )
+            put_text(
+                view,
+                move_review.classification[:10],
+                (1080, y),
+                ANALYSIS_COLORS.get(move_review.classification, (230, 230, 230)),
+                0.43,
+            )
+
+        buttons = [
+            Button("previous", "PREVIOUS", 675, 610, 150, 48, enabled=current > 0),
+            Button(
+                "next",
+                "NEXT",
+                840,
+                610,
+                150,
+                48,
+                enabled=current < len(review.moves) - 1,
+            ),
+            Button("close", "CLOSE", 1005, 610, 185, 48, active=True),
+        ]
+        for button in buttons:
+            draw_button(view, button)
+        put_text(
+            view,
+            f"Engine: {review.engine_name} | Labels are Chess Camera estimates.",
+            (675, 700),
+            (145, 155, 170),
+            0.42,
+        )
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+        if action == "previous" or key in (81, 2424832, ord(",")):
+            current = max(0, current - 1)
+        elif action == "next" or key in (83, 2555904, ord(".")):
+            current = min(len(review.moves) - 1, current + 1)
+        elif action == "close" or key in (10, 13, 27):
+            cv2.destroyWindow(window)
+            return
+        if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
+            return
+
+
+def create_post_game_review(
+    moves: list[chess.Move],
+    stockfish_path: Path | None,
+) -> GameReview | None:
+    if not moves:
+        show_result_popup("Review unavailable", "No moves have been recorded.")
+        return None
+    if stockfish_path is None:
+        show_result_popup(
+            "Stockfish not found",
+            "Install Stockfish, place its executable in the engines folder, "
+            "or launch with --stockfish followed by its full path.",
+        )
+        return None
+    try:
+        review = analyze_game(
+            moves,
+            stockfish_path,
+            DEFAULT_ANALYSIS_SECONDS,
+            show_analysis_progress,
+        )
+    except AnalysisUnavailable as error:
+        cv2.destroyWindow("Stockfish post-game analysis")
+        show_result_popup("Analysis failed", str(error))
+        return None
+    cv2.destroyWindow("Stockfish post-game analysis")
+    save_analysis_report(review, Path("games/latest_analysis.json"))
+    timestamped = Path("games") / (
+        datetime.now().strftime("analysis_%Y-%m-%d_%H-%M-%S") + ".json"
+    )
+    save_analysis_report(review, timestamped)
+    return review
 
 
 def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
@@ -1226,7 +1479,14 @@ def main() -> None:
     parser.add_argument(
         "--recalibrate", action="store_true", help="Ignore saved board corners"
     )
+    parser.add_argument(
+        "--stockfish",
+        type=str,
+        default=None,
+        help="Full path to a Stockfish executable for post-game review",
+    )
     args = parser.parse_args()
+    stockfish_path = find_stockfish(args.stockfish)
 
     capture = open_camera(args.camera)
     clock_worker: BackgroundClockReader | None = None
@@ -1340,6 +1600,7 @@ def main() -> None:
         game_click_queue: list[str] = []
         game_result = "*"
         game_finished = False
+        game_review: GameReview | None = None
         dismissed_draw_claims: set[str] = set()
         fps_sample_started = time.monotonic()
         fps_sample_frames = 0
@@ -1464,6 +1725,7 @@ def main() -> None:
                 fps_sample_frames = 0
 
             if start_pending:
+                game_review = None
                 board.reset()
                 moves.clear()
                 move_clocks.clear()
@@ -2016,7 +2278,17 @@ def main() -> None:
                 Button("new_game", "New game", button_x + 144, 466, 132, 34),
                 Button("offer_draw", "Offer draw", button_x, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
                 Button("resign", "Resign", button_x + 144, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
-                Button("quit", "Finish & save", button_x, 552, 276, 30),
+                Button(
+                    "review",
+                    "Review game",
+                    button_x,
+                    552,
+                    132,
+                    34,
+                    active=game_finished and bool(moves),
+                    enabled=game_finished and bool(moves),
+                ),
+                Button("quit", "Finish & save", button_x + 144, 552, 132, 34),
             ]
             for game_button in game_buttons:
                 draw_button(combined, game_button)
@@ -2039,6 +2311,23 @@ def main() -> None:
             }
             if click_action in key_for_action:
                 key = key_for_action[click_action]
+
+            if click_action == "review":
+                if game_review is None:
+                    game_review = create_post_game_review(moves, stockfish_path)
+                if game_review is not None:
+                    show_game_review(
+                        game_review,
+                        moves,
+                        setup.white_name,
+                        setup.black_name,
+                    )
+                    status = (
+                        "Post-game review saved to games/latest_analysis.json."
+                    )
+                cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
+                cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
+                continue
 
             manual_key_player = manual_clock_player_for_key(key)
             if manual_key_player is not None:
