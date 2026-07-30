@@ -11,7 +11,7 @@ import chess
 import cv2
 import numpy as np
 
-from clock_reader import BothClocks, LichessClockReader, format_pgn_clock
+from clock_reader import BackgroundClockReader, BothClocks, format_pgn_clock
 from chess_tracker import (
     BOARD_PIXELS,
     RankedMove,
@@ -32,6 +32,7 @@ AUTO_CONFIDENCE = 0.73
 MIN_CHANGE = 7.0
 LEGAL_FIT_THRESHOLD = 0.66
 RETURNED_BOARD_THRESHOLD = 5.2
+CLOCK_PREVIEW_INTERVAL = 1.5
 
 
 def put_text(
@@ -310,6 +311,7 @@ def main() -> None:
     args = parser.parse_args()
 
     capture = open_camera(args.camera)
+    clock_worker: BackgroundClockReader | None = None
     try:
         config: dict[str, object] = {}
         if CONFIG_PATH.exists() and not args.recalibrate:
@@ -330,6 +332,8 @@ def main() -> None:
         board = chess.Board()
         moves: list[chess.Move] = []
         move_clocks: list[float | None] = []
+        move_clock_tokens: list[int] = []
+        next_clock_token = 1
         reference: np.ndarray | None = None
         previous: np.ndarray | None = None
         stable_since: float | None = None
@@ -340,10 +344,41 @@ def main() -> None:
         illegal_warning = False
         status = "Place all pieces in the starting position, then press S."
         last_accept_time = 0.0
-        last_clock_scan = 0.0
+        last_clock_request = 0.0
         latest_clocks: BothClocks | None = None
         clock_error: str | None = None
-        clock_reader = LichessClockReader()
+        clock_worker = BackgroundClockReader()
+
+        def collect_clock_results() -> None:
+            nonlocal latest_clocks, clock_error
+            clock_updated = False
+            for result in clock_worker.poll():
+                if result.error is not None:
+                    clock_error = result.error
+                    continue
+                if result.clocks is None:
+                    continue
+                latest_clocks = result.clocks
+                clock_error = None
+                if (
+                    isinstance(result.tag, tuple)
+                    and len(result.tag) == 6
+                    and result.tag[0] == "move"
+                ):
+                    _, move_index, token, player_is_white, mapping, _captured_at = (
+                        result.tag
+                    )
+                    if (
+                        isinstance(move_index, int)
+                        and 0 <= move_index < len(move_clock_tokens)
+                        and move_clock_tokens[move_index] == token
+                    ):
+                        move_clocks[move_index] = clock_for_player(
+                            result.clocks, bool(player_is_white), bool(mapping)
+                        )
+                        clock_updated = True
+            if clock_updated:
+                save_game(moves, move_clocks)
 
         cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
 
@@ -354,13 +389,12 @@ def main() -> None:
             warped = warp_board(raw, board_corners)
             now = time.monotonic()
 
-            if now - last_clock_scan >= 1.0:
-                try:
-                    latest_clocks = clock_reader.read(raw, phone_corners)
-                    clock_error = None
-                except Exception as error:
-                    clock_error = str(error)
-                last_clock_scan = now
+            collect_clock_results()
+            if (
+                now - last_clock_request >= CLOCK_PREVIEW_INTERVAL
+                and clock_worker.submit_periodic(raw, phone_corners)
+            ):
+                last_clock_request = now
 
             if previous is not None:
                 motion = float(
@@ -428,12 +462,25 @@ def main() -> None:
                                 f"(confidence {confidence:.0%}). ENTER accepts; arrows change."
                             )
                             if auto_accept and confidence >= AUTO_CONFIDENCE:
-                                recorded_clock = clock_for_player(
-                                    latest_clocks, board.turn, bottom_clock_is_white
+                                move_index = len(moves)
+                                token = next_clock_token
+                                next_clock_token += 1
+                                move_clock_tokens.append(token)
+                                move_clocks.append(None)
+                                clock_worker.submit_move(
+                                    raw,
+                                    phone_corners,
+                                    (
+                                        "move",
+                                        move_index,
+                                        token,
+                                        board.turn,
+                                        bottom_clock_is_white,
+                                        now,
+                                    ),
                                 )
                                 board.push(candidate)
                                 moves.append(candidate)
-                                move_clocks.append(recorded_clock)
                                 reference = pending_frame.copy()
                                 pending.clear()
                                 pending_frame = None
@@ -513,6 +560,8 @@ def main() -> None:
 
             if clock_error:
                 put_text(panel, "Clock OCR unavailable", (25, 405), (80, 80, 255), 0.52)
+            elif clock_worker.busy:
+                put_text(panel, "Clock OCR: background", (25, 405), (120, 220, 255), 0.52)
             put_text(panel, "Controls", (25, 438), (100, 220, 255), 0.68)
             controls = [
                 "ENTER accept | arrows candidate",
@@ -545,7 +594,7 @@ def main() -> None:
                 phone_corners = calibrate_phone(capture)
                 save_config(board_corners, phone_corners, bottom_clock_is_white)
                 latest_clocks = None
-                last_clock_scan = 0.0
+                last_clock_request = 0.0
                 status = "Phone calibration saved."
             elif key == ord("f"):
                 bottom_clock_is_white = not bottom_clock_is_white
@@ -558,6 +607,7 @@ def main() -> None:
                 board.reset()
                 moves.clear()
                 move_clocks.clear()
+                move_clock_tokens.clear()
                 reference = warped.copy()
                 pending.clear()
                 pending_frame = None
@@ -572,6 +622,7 @@ def main() -> None:
             elif key == ord("u") and moves:
                 moves.pop()
                 move_clocks.pop()
+                move_clock_tokens.pop()
                 board.reset()
                 for move in moves:
                     board.push(move)
@@ -606,12 +657,25 @@ def main() -> None:
                 selected_move = pending[pending_index].move
                 if selected_move in board.legal_moves and pending_frame is not None:
                     san = board.san(selected_move)
-                    recorded_clock = clock_for_player(
-                        latest_clocks, board.turn, bottom_clock_is_white
+                    move_index = len(moves)
+                    token = next_clock_token
+                    next_clock_token += 1
+                    move_clock_tokens.append(token)
+                    move_clocks.append(None)
+                    clock_worker.submit_move(
+                        raw,
+                        phone_corners,
+                        (
+                            "move",
+                            move_index,
+                            token,
+                            board.turn,
+                            bottom_clock_is_white,
+                            now,
+                        ),
                     )
                     board.push(selected_move)
                     moves.append(selected_move)
-                    move_clocks.append(recorded_clock)
                     reference = pending_frame.copy()
                     pending.clear()
                     pending_frame = None
@@ -620,6 +684,9 @@ def main() -> None:
                     stable_since = None
                     status = f"Recorded {san}. Recent: {format_moves(moves)}"
 
+        # Finish exact move-time captures before writing the final timestamped PGN.
+        clock_worker.close()
+        collect_clock_results()
         if moves:
             timestamped = Path("games") / (
                 datetime.now().strftime("game_%Y-%m-%d_%H-%M-%S") + ".pgn"
@@ -627,6 +694,8 @@ def main() -> None:
             write_pgn(moves, timestamped, clocks=move_clocks)
             print(f"Saved PGN to {OUTPUT_PATH} and {timestamped}")
     finally:
+        if clock_worker is not None:
+            clock_worker.close()
         capture.release()
         cv2.destroyAllWindows()
 
