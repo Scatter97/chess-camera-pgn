@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 14)
+# Physical Chess Camera → Timed PGN (Revision 15)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -19,7 +19,7 @@ Revision 9 changes startup into a guided process:
 The game-settings screen contains clickable choices for:
 
 - Lichess OCR or the built-in clock;
-- Normal or Bullet detection;
+- Normal, Fast, or Bullet detection;
 - manual or automatic move confirmation;
 - which OCR clock display belongs to White;
 - separate starting times and increments for White and Black;
@@ -185,12 +185,24 @@ clock tag appears shortly afterward.
 
 ## Optional Bullet Mode
 
+Revision 15 adds **Fast** detection to the clickable pre-game settings. Fast
+mode waits about 0.35 seconds after the board stops moving and uses a
+lower-resolution copy only for motion checking. Exact square analysis still
+uses the full corrected board image.
+
+The camera preview displays the selected detection mode, live FPS, and a green
+stability-progress bar. With automatic confirmation enabled, Fast mode records
+only high-confidence moves; lower-confidence moves remain on screen for manual
+confirmation instead of being guessed.
+
+Use **Normal** for maximum reliability, **Fast** for ordinary quick games, and
+**Bullet** only when the lowest delay matters more than accuracy.
+
 Revision 6 adds a lower-latency mode for games with moves around one second
 apart. Normal accuracy mode remains the default every time the app starts.
 
-Press `B` before the game to enable Bullet Mode. Press it again before starting
-to return to normal mode. The app displays an orange **BULLET - LOWER ACCURACY**
-indicator while it is active.
+Select **Bullet** during the pre-game settings. The app displays an orange
+**BULLET - LOWER ACCURACY** indicator while it is active.
 
 Bullet Mode:
 
