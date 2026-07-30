@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 6)
+# Physical Chess Camera → Timed PGN (Revision 7)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -90,6 +90,26 @@ changing modes.
 Bullet Mode can handle much faster play, but hands, shadows, glare, or pieces
 hiding squares are more likely to cause an incorrect match. Normal mode is
 recommended whenever speed is not essential.
+
+## Live virtual chessboard
+
+Revision 7 adds a virtual board beside the corrected camera view. It is driven
+by the same legal game state used to create the PGN, so it updates after every
+accepted move rather than trying to redraw directly from a noisy camera frame.
+
+The virtual board:
+
+- keeps White at the bottom;
+- displays all recorded pieces and positions;
+- highlights the origin and destination of the latest move;
+- shows whose turn it is;
+- highlights check, checkmate, and stalemate states;
+- returns to the previous position when `U` undoes a move;
+- resets to the standard position when `S` starts a new game.
+
+Pieces use high-contrast circles and standard `K`, `Q`, `R`, `B`, `N`, and `P`
+labels so the display works consistently on both Windows and Ubuntu without
+requiring a separate chess-symbol font.
 
 ## Illegal-move warning
 
