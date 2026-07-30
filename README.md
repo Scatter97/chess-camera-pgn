@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 23)
+# Physical Chess Camera → Timed PGN (Revision 24)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,25 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 24: simpler setup and midgame clock adjustment
+
+The built-in clock now starts with one shared time-control row for both
+players. Adjusting the starting time or increment changes White and Black
+together. Turn on **Advanced: separate clocks** only when the players need
+different starting times or increments. Turning Advanced off again uses
+White's current settings as the shared time control.
+
+During a built-in-clock game, click **Adjust clocks** to pause both sides and
+open the clock editor. White and Black can independently receive `-1 minute`,
+`-10 seconds`, `+10 seconds`, or `+1 minute`. **Confirm** saves the displayed
+times; **Cancel** discards the changes. The player whose clock was running
+before the editor opened resumes afterward. Later PGN clock tags use the
+adjusted remaining time.
+
+Clock adjustment is unavailable while an illegal-move warning or an
+unconfirmed manual clock press is active. In Lichess OCR mode, adjust the
+physical phone clock instead.
 
 ## Revision 22: analysis-engine file picker
 
