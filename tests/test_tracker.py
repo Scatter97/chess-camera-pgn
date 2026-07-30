@@ -544,6 +544,22 @@ def test_advanced_clocks_hide_preset_controls() -> None:
     assert not any(button.action.startswith("apply_preset_") for button in buttons)
 
 
+def test_ocr_keeps_preset_controls_visible_but_disabled() -> None:
+    setup = GameSetup(clock_source="ocr")
+
+    _screen, buttons = render_setup_screen(setup, None)
+
+    chooser = next(
+        button for button in buttons if button.action == "choose_pinned_presets"
+    )
+    presets = [
+        button for button in buttons if button.action.startswith("apply_preset_")
+    ]
+    assert not chooser.enabled
+    assert len(presets) == len(DEFAULT_PINNED_TIME_CONTROLS)
+    assert all(not button.enabled for button in presets)
+
+
 def test_pinned_preset_selection_is_known_unique_and_limited() -> None:
     selected: tuple[str, ...] = ()
     for label in ("1+0", "2+1", "3+0", "3+2", "5+0", "5+3", "10+0"):
