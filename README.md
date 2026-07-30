@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 4)
+# Physical Chess Camera → Timed PGN (Revision 5)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -47,6 +47,22 @@ confidence is omitted instead of guessed. The move itself is still saved.
 
 The default mapping assumes the phone half nearest White is the bottom clock.
 Press `F` if the displayed White and Black clocks are reversed.
+
+### Non-blocking clock processing
+
+Revision 5 runs OCR on a dedicated background worker. Clock recognition no
+longer pauses the camera preview, board analysis, illegal-move warning, or
+controls.
+
+Each accepted move submits a copy of that exact camera frame as a prioritized
+clock job. The result is linked back to that move with an internal token before
+the PGN is updated. Optional preview readings are skipped whenever the OCR
+worker is busy, so they cannot build an unnecessary queue.
+
+On the development benchmark, board analysis took about 20 ms while reading
+both clocks took about 1.1 seconds. Revision 5 allows those operations to run at
+the same time. The camera interface can therefore remain responsive while the
+clock tag appears shortly afterward.
 
 ## Illegal-move warning
 
