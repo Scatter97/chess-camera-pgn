@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 21)
+# Physical Chess Camera → Timed PGN (Revision 22)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,31 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 22: analysis-engine file picker
+
+The game-settings screen now has a **Choose engine...** button. Click it to
+open the operating system's normal file picker and select Stockfish or another
+trusted UCI-compatible chess-engine executable.
+
+After selection, Chess Camera:
+
+- verifies that the chosen file is executable;
+- briefly starts it and checks that it speaks the UCI chess-engine protocol;
+- displays the engine's reported name in game setup;
+- saves the full path in `camera_config.json`;
+- automatically reuses that engine for future post-game reviews.
+
+Cancelling the picker or choosing an invalid file leaves the previous engine
+unchanged. Only select an engine downloaded from a source you trust. The
+existing `--engine` command-line option (`--stockfish` remains an alias) and
+automatic `engines/` folder detection remain available as fallbacks.
+
+On Ubuntu, the system file picker requires Tk support. Install it with:
+
+```bash
+sudo apt install python3-tk
+```
 
 ## Revision 21: local post-game review
 
@@ -73,15 +98,17 @@ Stockfish is optional and is not bundled with this repository. Download the
 current version from the [official Stockfish download page](https://stockfishchess.org/get-sf).
 Then use one of these methods:
 
-1. Put the executable inside an `engines` folder in the project. Its filename
+1. Click **Choose engine...** in the game-settings screen and select the
+   extracted executable.
+2. Put the executable inside an `engines` folder in the project. Its filename
    should begin with `stockfish`.
-2. Add the `stockfish` command to your system PATH.
-3. Pass its full path when launching:
+3. Add the `stockfish` command to your system PATH.
+4. Pass its full path when launching:
 
 ```text
-run_windows.bat --stockfish "C:\path\to\stockfish.exe"
-./run_ubuntu.sh --stockfish "/path/to/stockfish"
-./run_mac.command --stockfish "/path/to/stockfish"
+run_windows.bat --engine "C:\path\to\stockfish.exe"
+./run_ubuntu.sh --engine "/path/to/stockfish"
+./run_mac.command --engine "/path/to/stockfish"
 ```
 
 On Ubuntu and macOS, make sure a manually downloaded binary is executable:
@@ -437,7 +464,7 @@ These instructions are intended for Ubuntu 22.04 or 24.04 on a desktop session.
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-pip libgl1 libglib2.0-0 v4l-utils
+sudo apt install python3 python3-venv python3-pip python3-tk libgl1 libglib2.0-0 v4l-utils
 ```
 
 3. Make the launcher executable and run it:
