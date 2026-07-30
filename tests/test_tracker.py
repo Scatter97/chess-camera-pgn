@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from app import (
+    manual_clock_player_for_key,
     render_virtual_board,
     select_camera_backend,
     select_promotion_candidate,
@@ -265,7 +266,11 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert setup.white_name == "Josh"
     assert screen.shape == (760, 1100, 3)
     start = next(button for button in buttons if button.action == "start")
+    manual_clock_option = next(
+        button for button in buttons if button.action == "clock_switch_manual"
+    )
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
+    assert manual_clock_option.label == "Player keys A / L"
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
@@ -375,3 +380,11 @@ def test_manual_clock_press_waits_for_camera_move_and_can_be_cancelled() -> None
     assert controller.cancel(clock, 121.0)
     assert controller.pending is None
     assert clock.active_white is False
+
+
+def test_manual_clock_keys_are_split_across_keyboard_sides() -> None:
+    assert manual_clock_player_for_key(ord("a")) is chess.WHITE
+    assert manual_clock_player_for_key(ord("A")) is chess.WHITE
+    assert manual_clock_player_for_key(ord("l")) is chess.BLACK
+    assert manual_clock_player_for_key(ord("L")) is chess.BLACK
+    assert manual_clock_player_for_key(ord("x")) is None
