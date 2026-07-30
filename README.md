@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 27)
+# Physical Chess Camera → Timed PGN (Revision 28)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,17 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 28: built-in clock timeout
+
+When the active player's built-in clock reaches `0:00`, the game now ends
+automatically. Both clocks stop, a **Time expired** popup identifies the player
+whose time ran out and the winner, and the PGN is saved with `1-0` or `0-1`.
+No further camera move or clock-key press is accepted after the flag.
+
+This automatic result applies only to the built-in clock. Lichess OCR remains
+read-only because an uncertain or momentarily incorrect OCR reading must not
+falsely end a game; Lichess continues to handle its own clock expiration.
 
 ## Revision 27: Lichess-style time sliders
 
