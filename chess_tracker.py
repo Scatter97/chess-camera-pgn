@@ -15,6 +15,8 @@ from clock_reader import format_pgn_clock
 
 BOARD_PIXELS = 800
 SQUARE_PIXELS = BOARD_PIXELS // 8
+BOARD_MARGIN_PIXELS = 75
+WARP_PIXELS = BOARD_PIXELS + (2 * BOARD_MARGIN_PIXELS)
 
 
 @dataclass(frozen=True)
@@ -100,7 +102,7 @@ def rank_legal_moves(
 
 
 def square_change_scores(reference: np.ndarray, current: np.ndarray) -> dict[int, float]:
-    """Measure structural/color change in each square of two warped board images."""
+    """Measure change in each square, including overflow beyond board edges."""
     ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB)
     cur_lab = cv2.cvtColor(current, cv2.COLOR_BGR2LAB)
     ref_gray = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
@@ -109,25 +111,76 @@ def square_change_scores(reference: np.ndarray, current: np.ndarray) -> dict[int
     scores: dict[int, float] = {}
     margin = int(SQUARE_PIXELS * 0.12)
 
+    def region_score(y0: int, y1: int, x0: int, x1: int) -> float:
+        color_delta = cv2.absdiff(
+            ref_lab[y0:y1, x0:x1],
+            cur_lab[y0:y1, x0:x1],
+        )
+        color_score = float(np.mean(color_delta))
+        ref_edges = cv2.Canny(ref_gray[y0:y1, x0:x1], 60, 150)
+        cur_edges = cv2.Canny(cur_gray[y0:y1, x0:x1], 60, 150)
+        edge_score = float(np.mean(cv2.absdiff(ref_edges, cur_edges))) / 8.0
+        return color_score + edge_score
+
     for rank_from_top in range(8):
         for file_index in range(8):
-            y0 = rank_from_top * SQUARE_PIXELS + margin
-            y1 = (rank_from_top + 1) * SQUARE_PIXELS - margin
-            x0 = file_index * SQUARE_PIXELS + margin
-            x1 = (file_index + 1) * SQUARE_PIXELS - margin
-
-            color_delta = cv2.absdiff(
-                ref_lab[y0:y1, x0:x1], cur_lab[y0:y1, x0:x1]
+            board_y0 = BOARD_MARGIN_PIXELS + rank_from_top * SQUARE_PIXELS
+            board_y1 = board_y0 + SQUARE_PIXELS
+            board_x0 = BOARD_MARGIN_PIXELS + file_index * SQUARE_PIXELS
+            board_x1 = board_x0 + SQUARE_PIXELS
+            score = region_score(
+                board_y0 + margin,
+                board_y1 - margin,
+                board_x0 + margin,
+                board_x1 - margin,
             )
-            color_score = float(np.mean(color_delta))
 
-            ref_edges = cv2.Canny(ref_gray[y0:y1, x0:x1], 60, 150)
-            cur_edges = cv2.Canny(cur_gray[y0:y1, x0:x1], 60, 150)
-            edge_score = float(np.mean(cv2.absdiff(ref_edges, cur_edges))) / 8.0
+            # Tall pieces viewed at an angle can project beyond the flat board
+            # boundary. Score those exterior strips separately so the extra
+            # background does not dilute the normal square reading.
+            overflow_scores: list[float] = []
+            if rank_from_top == 0:
+                overflow_scores.append(
+                    region_score(
+                        0,
+                        board_y0 + margin,
+                        board_x0,
+                        board_x1,
+                    )
+                )
+            if rank_from_top == 7:
+                overflow_scores.append(
+                    region_score(
+                        board_y1 - margin,
+                        WARP_PIXELS,
+                        board_x0,
+                        board_x1,
+                    )
+                )
+            if file_index == 0:
+                overflow_scores.append(
+                    region_score(
+                        board_y0,
+                        board_y1,
+                        0,
+                        board_x0 + margin,
+                    )
+                )
+            if file_index == 7:
+                overflow_scores.append(
+                    region_score(
+                        board_y0,
+                        board_y1,
+                        board_x1 - margin,
+                        WARP_PIXELS,
+                    )
+                )
+            if overflow_scores:
+                score = max(score, max(overflow_scores) * 0.92)
 
             chess_rank = 7 - rank_from_top
             square = chess.square(file_index, chess_rank)
-            scores[square] = color_score + edge_score
+            scores[square] = score
 
     return scores
 
@@ -303,18 +356,35 @@ def legal_move_fit(candidate: RankedMove, scores: dict[int, float]) -> MoveFit:
 
 
 def warp_board(frame: np.ndarray, corners: Iterable[Iterable[float]]) -> np.ndarray:
+    """Correct board perspective while preserving space outside all four edges."""
     source = np.asarray(list(corners), dtype=np.float32)
+    first = BOARD_MARGIN_PIXELS
+    last = BOARD_MARGIN_PIXELS + BOARD_PIXELS - 1
     destination = np.asarray(
         [
-            [0, 0],
-            [BOARD_PIXELS - 1, 0],
-            [BOARD_PIXELS - 1, BOARD_PIXELS - 1],
-            [0, BOARD_PIXELS - 1],
+            [first, first],
+            [last, first],
+            [last, last],
+            [first, last],
         ],
         dtype=np.float32,
     )
     matrix = cv2.getPerspectiveTransform(source, destination)
-    return cv2.warpPerspective(frame, matrix, (BOARD_PIXELS, BOARD_PIXELS))
+    return cv2.warpPerspective(frame, matrix, (WARP_PIXELS, WARP_PIXELS))
+
+
+def orient_board_image(board_image: np.ndarray, white_camera_edge: str) -> np.ndarray:
+    """Rotate the corrected camera board so White is always at the bottom."""
+    rotations = {
+        "bottom": None,
+        "top": cv2.ROTATE_180,
+        "left": cv2.ROTATE_90_COUNTERCLOCKWISE,
+        "right": cv2.ROTATE_90_CLOCKWISE,
+    }
+    if white_camera_edge not in rotations:
+        raise ValueError(f"Unknown White camera edge: {white_camera_edge}")
+    rotation = rotations[white_camera_edge]
+    return board_image.copy() if rotation is None else cv2.rotate(board_image, rotation)
 
 
 def write_pgn(
