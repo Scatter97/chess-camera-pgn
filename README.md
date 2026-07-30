@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 5)
+# Physical Chess Camera → Timed PGN (Revision 6)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -63,6 +63,33 @@ On the development benchmark, board analysis took about 20 ms while reading
 both clocks took about 1.1 seconds. Revision 5 allows those operations to run at
 the same time. The camera interface can therefore remain responsive while the
 clock tag appears shortly afterward.
+
+## Optional Bullet Mode
+
+Revision 6 adds a lower-latency mode for games with moves around one second
+apart. Normal accuracy mode remains the default every time the app starts.
+
+Press `B` before the game to enable Bullet Mode. Press it again before starting
+to return to normal mode. The app displays an orange **BULLET - LOWER ACCURACY**
+indicator while it is active.
+
+Bullet Mode:
+
+- detects the Lichess active side changing as an extra move boundary;
+- waits about 0.12 seconds after the clock switch before reading the board;
+- falls back to a 0.22-second board-stability window if the clock colors cannot
+  be detected;
+- automatically records the best legal match;
+- reduces the post-move cooldown to 0.18 seconds;
+- keeps clock OCR in the background.
+
+Mode changes are blocked after moves have been recorded so one PGN cannot
+silently mix two detection strategies. Press `S` to begin a fresh game before
+changing modes.
+
+Bullet Mode can handle much faster play, but hands, shadows, glare, or pieces
+hiding squares are more likely to cause an incorrect match. Normal mode is
+recommended whenever speed is not essential.
 
 ## Illegal-move warning
 
@@ -180,6 +207,7 @@ recalibrate only the phone.
 | Q / R / B / N | Select the promotion piece |
 | U | Undo the last recorded move and resynchronize |
 | A | Turn high-confidence automatic acceptance on/off |
+| B | Toggle Bullet Mode before a game |
 | S | Start a new game from the standard position |
 | C | Recalibrate the board and phone |
 | K | Recalibrate only the phone screen |
