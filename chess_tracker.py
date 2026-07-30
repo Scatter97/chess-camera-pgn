@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -28,6 +29,17 @@ class MoveFit:
     score: float
     observed_squares: frozenset[chess.Square]
     explained_squares: frozenset[chess.Square]
+
+
+@dataclass(frozen=True)
+class ConsensusAnalysis:
+    move: chess.Move | None
+    ranked: list[RankedMove]
+    scores: dict[chess.Square, float]
+    frame: np.ndarray
+    valid_votes: int
+    confidence: float
+    ambiguous: bool
 
 
 def move_changed_squares(board: chess.Board, move: chess.Move) -> frozenset[chess.Square]:
@@ -118,6 +130,117 @@ def square_change_scores(reference: np.ndarray, current: np.ndarray) -> dict[int
             scores[square] = color_score + edge_score
 
     return scores
+
+
+def prepare_comparison_frame(
+    reference: np.ndarray,
+    current: np.ndarray,
+    max_shift: float = 8.0,
+) -> np.ndarray:
+    """Align a stable frame and compensate for a global lighting change."""
+    ref_gray = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    cur_gray = cv2.cvtColor(current, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    shift, response = cv2.phaseCorrelate(ref_gray, cur_gray)
+    dx, dy = shift
+    aligned = current
+    if response >= 0.02 and abs(dx) <= max_shift and abs(dy) <= max_shift:
+        transform = np.float32([[1, 0, -dx], [0, 1, -dy]])
+        aligned = cv2.warpAffine(
+            current,
+            transform,
+            (current.shape[1], current.shape[0]),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REFLECT,
+        )
+
+    ref_lab = cv2.cvtColor(reference, cv2.COLOR_BGR2LAB)
+    aligned_lab = cv2.cvtColor(aligned, cv2.COLOR_BGR2LAB).astype(np.int16)
+    light_delta = int(
+        round(float(np.median(ref_lab[:, :, 0]) - np.median(aligned_lab[:, :, 0])))
+    )
+    aligned_lab[:, :, 0] = np.clip(
+        aligned_lab[:, :, 0] + light_delta,
+        0,
+        255,
+    )
+    return cv2.cvtColor(aligned_lab.astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
+def average_square_scores(
+    score_sets: list[dict[chess.Square, float]],
+) -> dict[chess.Square, float]:
+    if not score_sets:
+        return {square: 0.0 for square in chess.SQUARES}
+    return {
+        square: float(np.mean([scores[square] for scores in score_sets]))
+        for square in chess.SQUARES
+    }
+
+
+def select_consensus_move(
+    votes: list[chess.Move],
+    required_votes: int = 2,
+) -> chess.Move | None:
+    """Return a unique move supported by enough independent frame readings."""
+    if not votes:
+        return None
+    counts = Counter(votes)
+    move, count = counts.most_common(1)[0]
+    tied = sum(1 for value in counts.values() if value == count) > 1
+    return move if count >= required_votes and not tied else None
+
+
+def analyze_frame_consensus(
+    board: chess.Board,
+    reference: np.ndarray,
+    frames: list[np.ndarray],
+    fit_threshold: float,
+) -> ConsensusAnalysis:
+    """Analyze three stable frames and require two to agree on a legal move."""
+    if not frames:
+        raise ValueError("At least one frame is required for consensus analysis.")
+
+    prepared = [prepare_comparison_frame(reference, frame) for frame in frames]
+    score_sets = [square_change_scores(reference, frame) for frame in prepared]
+    votes: list[chess.Move] = []
+    all_candidates: list[chess.Move] = []
+    vote_confidences: list[tuple[chess.Move, float]] = []
+    for scores in score_sets:
+        ranked = rank_legal_moves(board, scores)
+        if not ranked:
+            continue
+        all_candidates.append(ranked[0].move)
+        fit = legal_move_fit(ranked[0], scores)
+        if fit.score >= fit_threshold:
+            votes.append(ranked[0].move)
+            vote_confidences.append(
+                (ranked[0].move, confidence_for(ranked, scores))
+            )
+
+    move = select_consensus_move(votes)
+    ambiguous = move is None and select_consensus_move(all_candidates) is None
+    averaged_scores = average_square_scores(score_sets)
+    ranked = rank_legal_moves(board, averaged_scores)
+    if move is not None:
+        ranked.sort(key=lambda candidate: candidate.move != move)
+    confidence_values = [
+        value for voted_move, value in vote_confidences if voted_move == move
+    ]
+    confidence = (
+        float(np.mean(confidence_values))
+        if confidence_values
+        else confidence_for(ranked, averaged_scores)
+    )
+    median_frame = np.median(np.stack(prepared), axis=0).astype(np.uint8)
+    return ConsensusAnalysis(
+        move,
+        ranked,
+        averaged_scores,
+        median_frame,
+        len(votes),
+        confidence,
+        ambiguous,
+    )
 
 
 def board_looks_restored(scores: dict[int, float]) -> bool:
