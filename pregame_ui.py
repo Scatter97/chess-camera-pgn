@@ -379,20 +379,30 @@ def _suggestion_buttons(
     suggestions: tuple[str, ...],
     y: int,
     visible: bool,
+    right_edge: int,
 ) -> None:
     if not visible:
         return
     x = 40
-    for index, suggestion in enumerate(suggestions[:3]):
-        label = suggestion[:18]
-        width = min(112, max(82, 18 + len(label) * 8))
+    displayed = suggestions[:3]
+    for index, suggestion in enumerate(displayed):
+        label = suggestion[:40]
+        ideal_width = cv2.getTextSize(
+            label,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.53,
+            1,
+        )[0][0] + 24
+        remaining = len(displayed) - index - 1
+        available_width = right_edge - x - remaining * 90
+        width = max(82, min(ideal_width, available_width))
         button = Button(
             f"suggest_{field}_{index}",
             label,
             x,
             y,
             width,
-            24,
+            20,
         )
         buttons.append(button)
         draw_button(image, button)
@@ -447,9 +457,27 @@ def render_setup_screen(
         270,
         focused_field == "event",
     )
-    swap_button = Button("swap_players", "Swap sides", 425, 139, 105, 72)
+    swap_button = Button("swap_players", "", 425, 139, 105, 72)
     buttons.append(swap_button)
     draw_button(view, swap_button)
+    cv2.arrowedLine(
+        view,
+        (455, 194),
+        (455, 154),
+        (120, 255, 170),
+        4,
+        cv2.LINE_AA,
+        tipLength=0.30,
+    )
+    cv2.arrowedLine(
+        view,
+        (500, 154),
+        (500, 194),
+        (120, 220, 255),
+        4,
+        cv2.LINE_AA,
+        tipLength=0.30,
+    )
     _suggestion_buttons(
         view,
         buttons,
@@ -457,6 +485,7 @@ def render_setup_screen(
         player_suggestions,
         168,
         focused_field == "white",
+        410,
     )
     _suggestion_buttons(
         view,
@@ -465,6 +494,7 @@ def render_setup_screen(
         player_suggestions,
         242,
         focused_field == "black",
+        410,
     )
     _suggestion_buttons(
         view,
@@ -473,6 +503,7 @@ def render_setup_screen(
         event_suggestions,
         316,
         focused_field == "event",
+        530,
     )
 
     draw_text(view, "Game options", (40, 354), (100, 220, 255), 0.68)
