@@ -18,6 +18,12 @@ class _ClockSnapshot:
     active_white: bool
 
 
+@dataclass(frozen=True)
+class ManualClockRecord:
+    player_is_white: bool
+    recorded_seconds: float
+
+
 class BuiltInChessClock:
     """Two-sided Fischer-increment chess clock driven by accepted moves."""
 
@@ -105,3 +111,49 @@ class BuiltInChessClock:
                 self.black_seconds = current
         self.active_white = None
         self.started_at = None
+
+
+class ManualClockController:
+    """Coordinates a player's clock press with later camera move acceptance."""
+
+    def __init__(self) -> None:
+        self.pending: ManualClockRecord | None = None
+
+    def ready_for(self, player_is_white: bool) -> bool:
+        return (
+            self.pending is not None
+            and self.pending.player_is_white == player_is_white
+        )
+
+    def press(
+        self,
+        clock: BuiltInChessClock,
+        player_is_white: bool,
+        now: float,
+    ) -> ManualClockRecord:
+        if self.pending is not None:
+            raise ValueError("A manual clock press is already waiting for a move.")
+        self.pending = ManualClockRecord(
+            player_is_white,
+            clock.complete_move(player_is_white, now),
+        )
+        return self.pending
+
+    def consume(self, player_is_white: bool) -> float:
+        if not self.ready_for(player_is_white):
+            raise ValueError("The correct player must press the clock first.")
+        assert self.pending is not None
+        recorded = self.pending.recorded_seconds
+        self.pending = None
+        return recorded
+
+    def cancel(self, clock: BuiltInChessClock, now: float) -> bool:
+        if self.pending is None:
+            return False
+        if not clock.undo(now):
+            return False
+        self.pending = None
+        return True
+
+    def reset(self) -> None:
+        self.pending = None
