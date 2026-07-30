@@ -63,7 +63,9 @@ def move_changed_squares(board: chess.Board, move: chess.Move) -> frozenset[ches
 
 
 def rank_legal_moves(
-    board: chess.Board, square_scores: dict[chess.Square, float]
+    board: chess.Board,
+    square_scores: dict[chess.Square, float],
+    learned_patterns: dict[str, list[float]] | None = None,
 ) -> list[RankedMove]:
     """
     Rank legal moves against observed per-square visual changes.
@@ -83,6 +85,23 @@ def rank_legal_moves(
         unexpected = float(np.mean(unexpected_values[:3])) if unexpected_values else 0.0
         size_penalty = max(0, len(expected) - 2) * 0.35
         score = explained - (0.72 * unexpected) - size_penalty
+        if learned_patterns:
+            pattern = learned_patterns.get(move.uci())
+            if pattern is not None and len(pattern) == 64:
+                observed = np.asarray(
+                    [square_scores[square] for square in chess.SQUARES],
+                    dtype=np.float64,
+                )
+                learned = np.asarray(pattern, dtype=np.float64)
+                observed_norm = float(np.linalg.norm(observed))
+                learned_norm = float(np.linalg.norm(learned))
+                if observed_norm > 0 and learned_norm > 0:
+                    similarity = float(
+                        np.dot(observed, learned) / (observed_norm * learned_norm)
+                    )
+                    # A learned signature is supporting evidence, while the
+                    # legal-move square explanation remains the main signal.
+                    score += max(0.0, similarity - 0.45) * 5.0
         ranked.append(RankedMove(move, score, expected))
 
     # The camera cannot distinguish promotion piece types. Prefer queen unless
