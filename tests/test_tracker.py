@@ -565,9 +565,13 @@ def test_pregame_text_fields_and_click_targets() -> None:
     advanced_clock = next(
         button for button in buttons if button.action == "advanced_clock_toggle"
     )
+    bullet_option = next(
+        button for button in buttons if button.action == "mode_bullet"
+    )
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
     assert manual_clock_option.label == "Player keys A / L"
     assert advanced_clock.label == "Advanced: separate clocks"
+    assert bullet_option.label == "Bullet (BETA)"
     white_left = next(
         button for button in buttons if button.action == "white_edge_left"
     )
