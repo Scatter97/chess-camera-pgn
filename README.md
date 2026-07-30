@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 11)
+# Physical Chess Camera → Timed PGN (Revision 12)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -23,9 +23,31 @@ The game-settings screen contains clickable choices for:
 - manual or automatic move confirmation;
 - which OCR clock display belongs to White;
 - separate starting times and increments for White and Black;
+- camera-controlled or player-controlled built-in clock switching;
 - board or phone recalibration.
 
 Player and event names are included in the saved PGN headers.
+
+## Automatic or manual built-in clock switching
+
+Revision 12 adds a **Clock switch** choice to the pre-game settings when the
+built-in clock is selected:
+
+- **Camera automatic:** the camera stops the player’s clock when the move is
+  detected and accepted. This is the original behavior.
+- **Player button:** the match screen shows **End White Turn** or
+  **End Black Turn**. The player clicks it after completing the physical move.
+  Their clock stops immediately, their increment is added, and the opponent’s
+  clock starts.
+
+In Player button mode, the camera move cannot be accepted until the correct
+player has pressed the clock button. If automatic confirmation or Bullet Mode
+is active and the camera already has a move waiting, pressing the clock button
+also accepts that move. If the clock was pressed accidentally before the move
+was accepted, click **Undo** to cancel that clock press.
+
+This setting only affects the built-in clock. Lichess OCR continues to read the
+phone clock, which the players operate on the phone itself.
 
 ## Match-screen layout
 
