@@ -53,11 +53,15 @@ from game_analysis import (
 )
 from pregame_ui import (
     Button,
+    DEFAULT_PINNED_TIME_CONTROLS,
     GameSetup,
+    TIME_CONTROL_PRESETS,
     apply_setup_action,
     clicked_action,
     draw_button,
+    normalize_pinned_time_controls,
     render_setup_screen,
+    toggle_pinned_time_control,
     update_text_field,
 )
 
@@ -221,6 +225,7 @@ def save_config(
     white_camera_edge: str,
     active_profile: str = "Default board",
     engine_path: Path | None = None,
+    pinned_time_controls: tuple[str, ...] = DEFAULT_PINNED_TIME_CONTROLS,
 ) -> None:
     CONFIG_PATH.write_text(
         json.dumps(
@@ -231,6 +236,7 @@ def save_config(
                 "white_camera_edge": white_camera_edge,
                 "active_profile": active_profile,
                 "engine_path": str(engine_path) if engine_path else None,
+                "pinned_time_controls": list(pinned_time_controls),
             },
             indent=2,
         ),
@@ -1298,6 +1304,80 @@ def adjust_builtin_clock(clock: BuiltInChessClock) -> bool:
             return False
 
 
+def choose_pinned_time_controls(
+    current: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    """Open a preset picker; return the confirmed selection or None."""
+    window = "Choose pinned time controls"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 760, 470)
+    selected = current
+    click_queue: list[str] = []
+    buttons: list[Button] = []
+    message = "Select up to six presets."
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        view = np.zeros((470, 760, 3), dtype=np.uint8)
+        view[:] = (31, 34, 40)
+        put_text(view, "Choose Pinned Time Controls", (28, 45), (100, 220, 255), 0.82)
+        put_text(
+            view,
+            "Selected presets appear in the empty setup area.",
+            (28, 78),
+            (175, 185, 200),
+            0.50,
+        )
+        buttons = []
+        for index, (label, _initial, _increment) in enumerate(
+            TIME_CONTROL_PRESETS
+        ):
+            button = Button(
+                f"toggle_preset_{label}",
+                label,
+                45 + (index % 4) * 175,
+                115 + (index // 4) * 58,
+                150,
+                44,
+                active=label in selected,
+            )
+            buttons.append(button)
+            draw_button(view, button)
+        confirm = Button("confirm", "CONFIRM", 250, 370, 210, 54, active=True)
+        cancel = Button("cancel", "Cancel", 480, 370, 210, 54)
+        buttons.extend((confirm, cancel))
+        draw_button(view, confirm)
+        draw_button(view, cancel)
+        put_text(view, message, (45, 345), (120, 220, 255), 0.48)
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+        if action is not None and action.startswith("toggle_preset_"):
+            label = action.removeprefix("toggle_preset_")
+            updated = toggle_pinned_time_control(selected, label)
+            if updated == selected and label not in selected and len(selected) >= 6:
+                message = "Maximum six pinned presets. Remove one before adding another."
+            else:
+                selected = updated
+                message = f"{len(selected)}/6 presets selected."
+            continue
+        if action == "confirm" or key in (10, 13):
+            cv2.destroyWindow(window)
+            return selected
+        if action == "cancel" or key == 27:
+            cv2.destroyWindow(window)
+            return None
+
+
 def run_pregame_wizard(
     capture: cv2.VideoCapture,
     setup: GameSetup,
@@ -1344,6 +1424,7 @@ def run_pregame_wizard(
             setup.white_camera_edge,
             profile.name,
             engine_path,
+            setup.pinned_time_controls,
         )
 
     def select_profile(selected: BoardProfile) -> None:
@@ -1466,6 +1547,23 @@ def run_pregame_wizard(
             setup = replace(setup, engine_name=engine_name)
             persist_profile()
             message = f"Selected analysis engine: {engine_name}."
+            continue
+        if action == "choose_pinned_presets":
+            focused_field = None
+            selected_presets = choose_pinned_time_controls(
+                setup.pinned_time_controls
+            )
+            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(window, on_mouse)
+            if selected_presets is None:
+                message = "Pinned presets were not changed."
+            else:
+                setup = replace(
+                    setup,
+                    pinned_time_controls=selected_presets,
+                )
+                persist_profile()
+                message = f"Pinned {len(selected_presets)} time controls."
             continue
         if action == "start" or (key in (10, 13) and focused_field is None):
             persist_profile()
@@ -1750,6 +1848,9 @@ def main() -> None:
         stockfish_path = find_stockfish(
             str(configured_engine_path) if configured_engine_path else None
         )
+        pinned_time_controls = normalize_pinned_time_controls(
+            config.get("pinned_time_controls", DEFAULT_PINNED_TIME_CONTROLS)
+        )
 
         profile_store = BoardProfileStore(PROFILE_DIRECTORY)
         profile_store.load()
@@ -1779,6 +1880,7 @@ def main() -> None:
             white_camera_edge,
             profile.name,
             stockfish_path,
+            pinned_time_controls,
         )
 
         setup = GameSetup(
@@ -1788,6 +1890,7 @@ def main() -> None:
             profile_samples=profile.sample_count,
             learning_enabled=profile.learning_enabled,
             engine_name=stockfish_path.name if stockfish_path else "Auto-detect",
+            pinned_time_controls=pinned_time_controls,
         )
         wizard_result = run_pregame_wizard(
             capture,
