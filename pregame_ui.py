@@ -9,7 +9,7 @@ from builtin_clock import ClockSettings
 
 
 SETUP_WIDTH = 1100
-SETUP_HEIGHT = 820
+SETUP_HEIGHT = 920
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,9 @@ class GameSetup:
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
     manual_clock_switch: bool = False
+    profile_name: str = "Default board"
+    profile_samples: int = 0
+    learning_enabled: bool = True
     clock_settings: ClockSettings = ClockSettings()
 
     def pgn_headers(self) -> dict[str, str]:
@@ -454,20 +457,54 @@ def render_setup_screen(
         0.46,
     )
 
+    draw_text(view, "Board profile", (42, 733), scale=0.48)
+    draw_text(
+        view,
+        f"{setup.profile_name[:22]}  ({setup.profile_samples} samples)",
+        (155, 706),
+        (120, 255, 170),
+        0.52,
+    )
+    profile_buttons = [
+        Button("profile_previous", "< Previous", 155, 722, 112, 42),
+        Button("profile_next", "Next >", 278, 722, 100, 42),
+        Button("profile_new", "New board", 389, 722, 115, 42),
+        Button("profile_train", "Train moves", 515, 722, 140, 42),
+        Button(
+            "learning_toggle",
+            "Learning ON" if setup.learning_enabled else "Learning OFF",
+            670,
+            722,
+            170,
+            42,
+            setup.learning_enabled,
+        ),
+    ]
+    for button in profile_buttons:
+        buttons.append(button)
+        draw_button(view, button)
+    draw_text(
+        view,
+        "Profiles keep separate calibration and learn from confirmed moves.",
+        (155, 788),
+        (165, 175, 190),
+        0.43,
+    )
+
     calibration_buttons = [
-        Button("calibrate_board", "Recalibrate board", 40, 750, 205, 48),
-        Button("calibrate_phone", "Recalibrate phone", 260, 750, 205, 48),
-        Button("verify_grid", "Check all 64 squares", 480, 750, 240, 48),
+        Button("calibrate_board", "Recalibrate board", 40, 850, 205, 48),
+        Button("calibrate_phone", "Recalibrate phone", 260, 850, 205, 48),
+        Button("verify_grid", "Check all 64 squares", 480, 850, 240, 48),
     ]
     for button in calibration_buttons:
         buttons.append(button)
         draw_button(view, button)
 
-    start_button = Button("start", "START GAME", 820, 740, 240, 58, active=True)
+    start_button = Button("start", "START GAME", 820, 840, 240, 58, active=True)
     buttons.append(start_button)
     draw_button(view, start_button)
     if message:
-        draw_text(view, message[:60], (600, 712), (120, 220, 255), 0.46)
+        draw_text(view, message[:60], (600, 822), (120, 220, 255), 0.46)
 
     return view, buttons
 
@@ -505,6 +542,8 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         return replace(setup, manual_clock_switch=False)
     if action == "clock_switch_manual" and setup.clock_source == "builtin":
         return replace(setup, manual_clock_switch=True)
+    if action == "learning_toggle":
+        return replace(setup, learning_enabled=not setup.learning_enabled)
 
     settings = setup.clock_settings
     values = {
