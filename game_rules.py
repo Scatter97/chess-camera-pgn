@@ -12,6 +12,25 @@ class GameOutcome:
     message: str
 
 
+def timeout_outcome(
+    flagged_white: bool,
+    white_name: str = "White",
+    black_name: str = "Black",
+) -> GameOutcome:
+    """Return the decisive result when one built-in clock reaches zero."""
+    loser = (white_name.strip() or "White") if flagged_white else (
+        black_name.strip() or "Black"
+    )
+    winner = (black_name.strip() or "Black") if flagged_white else (
+        white_name.strip() or "White"
+    )
+    return GameOutcome(
+        "0-1" if flagged_white else "1-0",
+        "Time expired",
+        f"{loser}'s time ran out. {winner} wins.",
+    )
+
+
 def automatic_outcome(board: chess.Board) -> GameOutcome | None:
     """Return an ending that is automatic under standard chess rules."""
     if board.is_checkmate():
