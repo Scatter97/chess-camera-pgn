@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 3)
+# Physical Chess Camera → Timed PGN (Revision 4)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -61,6 +61,62 @@ warning disappears automatically and the game can continue.
 Because this is camera-based detection, a hand, strong moving shadow, or an
 obstructed square can occasionally look like an illegal move. Keep hands clear
 after moving and use even lighting.
+
+## Supported systems
+
+Revision 4 automatically selects the native camera backend:
+
+- Ubuntu/Linux: Video4Linux2 (V4L2)
+- Windows: DirectShow
+- macOS: AVFoundation
+
+If the preferred backend cannot open the camera, the app automatically retries
+with OpenCV's default backend.
+
+## Fast setup on Ubuntu
+
+These instructions are intended for Ubuntu 22.04 or 24.04 on a desktop session.
+
+1. Open Terminal in the project folder.
+2. Install the system packages:
+
+```bash
+sudo apt update
+sudo apt install python3 python3-venv python3-pip libgl1 libglib2.0-0 v4l-utils
+```
+
+3. Make the launcher executable and run it:
+
+```bash
+chmod +x run_ubuntu.sh
+./run_ubuntu.sh
+```
+
+The first launch creates `.venv` and installs the Python dependencies and
+offline OCR models. Later launches reuse that environment.
+
+To choose another camera:
+
+```bash
+./run_ubuntu.sh --camera 1
+```
+
+To list cameras recognized by Ubuntu:
+
+```bash
+v4l2-ctl --list-devices
+ls /dev/video*
+```
+
+If the camera exists but the app reports permission denied, add your account to
+Ubuntu's `video` group, then log out and back in:
+
+```bash
+sudo usermod -aG video "$USER"
+```
+
+The graphical interface requires a normal Ubuntu desktop session. It will not
+display from a text-only SSH session without graphical forwarding.
 
 ## Fast setup on Windows
 
