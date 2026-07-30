@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from dataclasses import replace
@@ -667,7 +668,9 @@ def run_guided_move_training(
 
 
 def render_virtual_board(
-    board: chess.Board, last_move: chess.Move | None = None
+    board: chess.Board,
+    last_move: chess.Move | None = None,
+    suggested_move: chess.Move | None = None,
 ) -> np.ndarray:
     """Render the recorded chess position with White at the bottom."""
     canvas = np.zeros((VIRTUAL_VIEW_HEIGHT, VIRTUAL_VIEW_WIDTH, 3), dtype=np.uint8)
@@ -755,6 +758,36 @@ def render_virtual_board(
                     cv2.LINE_AA,
                 )
 
+    if suggested_move is not None:
+        def square_center(square: chess.Square) -> tuple[int, int]:
+            file_index = chess.square_file(square)
+            rank_from_top = 7 - chess.square_rank(square)
+            return (
+                left + file_index * cell + cell // 2,
+                top + rank_from_top * cell + cell // 2,
+            )
+
+        start = square_center(suggested_move.from_square)
+        end = square_center(suggested_move.to_square)
+        cv2.arrowedLine(
+            canvas,
+            start,
+            end,
+            (25, 45, 25),
+            10,
+            cv2.LINE_AA,
+            tipLength=0.23,
+        )
+        cv2.arrowedLine(
+            canvas,
+            start,
+            end,
+            (95, 235, 125),
+            5,
+            cv2.LINE_AA,
+            tipLength=0.23,
+        )
+
     for file_index, file_name in enumerate("abcdefgh"):
         put_text(
             canvas,
@@ -835,9 +868,75 @@ def show_analysis_progress(current: int, total: int) -> None:
 
 def _analysis_eval_text(centipawns: int, mate: int | None) -> str:
     if mate is not None:
-        return f"Mate {abs(mate)} for {'mover' if mate > 0 else 'opponent'}"
+        return f"{'+' if mate > 0 else '-'}M{abs(mate)}"
     sign = "+" if centipawns >= 0 else ""
     return f"{sign}{centipawns / 100:.2f}"
+
+
+def evaluation_bar_fraction(centipawns: int, mate: int | None) -> float:
+    """Return White's share of a vertical evaluation bar."""
+    if mate is not None:
+        return 1.0 if mate > 0 else 0.0
+    return 0.5 + 0.5 * math.tanh(centipawns / 400.0)
+
+
+def review_scroll_start(
+    start: int,
+    total: int,
+    delta: int,
+    visible_count: int = 9,
+) -> int:
+    maximum = max(0, total - visible_count)
+    return min(maximum, max(0, start + delta))
+
+
+def ensure_review_move_visible(
+    current: int,
+    start: int,
+    total: int,
+    visible_count: int = 9,
+) -> int:
+    if current < start:
+        return current
+    if current >= start + visible_count:
+        return review_scroll_start(
+            current - visible_count + 1,
+            total,
+            0,
+            visible_count,
+        )
+    return review_scroll_start(start, total, 0, visible_count)
+
+
+def mouse_wheel_direction(flags: int) -> int:
+    """Decode OpenCV's signed mouse-wheel delta without optional bindings."""
+    delta = (int(flags) >> 16) & 0xFFFF
+    if delta & 0x8000:
+        delta -= 0x10000
+    if delta == 0:
+        delta = int(flags)
+    return 1 if delta > 0 else (-1 if delta < 0 else 0)
+
+
+def draw_evaluation_bar(
+    view: np.ndarray,
+    centipawns: int,
+    mate: int | None,
+) -> None:
+    top, bottom = 90, 610
+    left, right = 648, 669
+    white_fraction = evaluation_bar_fraction(centipawns, mate)
+    split = top + int(round((bottom - top) * (1.0 - white_fraction)))
+    cv2.rectangle(view, (left, top), (right, split), (38, 41, 47), -1)
+    cv2.rectangle(view, (left, split), (right, bottom), (238, 238, 238), -1)
+    cv2.rectangle(view, (left, top), (right, bottom), (115, 125, 142), 2)
+    put_text(
+        view,
+        _analysis_eval_text(centipawns, mate),
+        (644, 78),
+        (235, 235, 240),
+        0.36,
+    )
 
 
 def show_game_review(
@@ -850,12 +949,20 @@ def show_game_review(
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 1220, 720)
     current = 0
+    scroll_start = 0
     click_queue: list[str] = []
     buttons: list[Button] = []
 
     def on_mouse(
         event: int, x: int, y: int, _flags: int, _data: object
     ) -> None:
+        if event == cv2.EVENT_MOUSEWHEEL:
+            direction = mouse_wheel_direction(_flags)
+            if direction:
+                click_queue.append(
+                    "scroll_up" if direction > 0 else "scroll_down"
+                )
+            return
         if event != cv2.EVENT_LBUTTONUP:
             return
         action = clicked_action(buttons, x, y)
@@ -866,25 +973,42 @@ def show_game_review(
     while True:
         selected = review.moves[current]
         board = chess.Board()
-        for move in moves[: current + 1]:
+        for move in moves[:current]:
             board.push(move)
-        board_view = render_virtual_board(board, moves[current])
+        best_move = (
+            chess.Move.from_uci(selected.best_move_uci)
+            if selected.best_move_uci
+            else None
+        )
+        if best_move is not None and best_move not in board.legal_moves:
+            best_move = None
+        board_view = render_virtual_board(
+            board,
+            suggested_move=best_move,
+        )
         view = np.zeros((720, 1220, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
         view[50:670, 20:640] = board_view
+        draw_evaluation_bar(
+            view,
+            selected.evaluation_after_white,
+            selected.mate_after_white,
+        )
 
         put_text(view, "Post-game Review", (675, 42), (100, 220, 255), 0.9)
         put_text(
             view,
-            f"{white_name or 'White'} accuracy: {review.white_accuracy:.1f}%",
-            (675, 82),
+            f"{(white_name or 'White')[:20]}: {review.white_accuracy:.1f}% | "
+            f"Avg loss {review.white_average_centipawn_loss:.1f} cp",
+            (700, 82),
             (235, 235, 240),
             0.52,
         )
         put_text(
             view,
-            f"{black_name or 'Black'} accuracy: {review.black_accuracy:.1f}%",
-            (675, 110),
+            f"{(black_name or 'Black')[:20]}: {review.black_accuracy:.1f}% | "
+            f"Avg loss {review.black_average_centipawn_loss:.1f} cp",
+            (700, 110),
             (185, 190, 200),
             0.52,
         )
@@ -900,13 +1024,13 @@ def show_game_review(
             view,
             f"Move accuracy {selected.accuracy:.1f}% | "
             f"loss {selected.centipawn_loss} cp | "
-            f"eval {_analysis_eval_text(selected.evaluation_after, selected.mate_after)}",
+            f"White eval {_analysis_eval_text(selected.evaluation_after_white, selected.mate_after_white)}",
             (675, 190),
             (185, 195, 210),
             0.48,
         )
         best_text = (
-            f"Engine preferred {selected.best_move_san} "
+            f"Stockfish suggests {selected.best_move_san} "
             f"({selected.best_move_uci})"
             if selected.best_move_san and selected.best_move_uci != selected.uci
             else "Played an engine-best move."
@@ -939,12 +1063,15 @@ def show_game_review(
         put_text(view, "W", (835, 244), (235, 235, 240), 0.45)
         put_text(view, "B", (895, 244), (185, 190, 200), 0.45)
 
-        start = max(0, min(current - 4, len(review.moves) - 9))
-        visible = review.moves[start : start + 9]
+        visible = review.moves[scroll_start : scroll_start + 9]
         put_text(view, "Move list", (975, 254), (100, 220, 255), 0.55)
+        move_buttons: list[Button] = []
         for row, move_review in enumerate(visible):
-            index = start + row
+            index = scroll_start + row
             y = 286 + row * 33
+            move_buttons.append(
+                Button(f"select_move_{index}", "", 965, y - 23, 233, 30)
+            )
             if index == current:
                 cv2.rectangle(view, (965, y - 23), (1198, y + 7), (55, 65, 72), -1)
             prefix = f"{move_review.move_number}{'.' if move_review.white else '...'}"
@@ -962,7 +1089,7 @@ def show_game_review(
                 0.43,
             )
 
-        buttons = [
+        navigation_buttons = [
             Button("previous", "PREVIOUS", 675, 610, 150, 48, enabled=current > 0),
             Button(
                 "next",
@@ -974,8 +1101,27 @@ def show_game_review(
                 enabled=current < len(review.moves) - 1,
             ),
             Button("close", "CLOSE", 1005, 610, 185, 48, active=True),
+            Button(
+                "scroll_up",
+                "^",
+                1140,
+                228,
+                26,
+                26,
+                enabled=scroll_start > 0,
+            ),
+            Button(
+                "scroll_down",
+                "v",
+                1172,
+                228,
+                26,
+                26,
+                enabled=scroll_start + 9 < len(review.moves),
+            ),
         ]
-        for button in buttons:
+        buttons = move_buttons + navigation_buttons
+        for button in navigation_buttons:
             draw_button(view, button)
         put_text(
             view,
@@ -991,9 +1137,42 @@ def show_game_review(
             current = max(0, current - 1)
         elif action == "next" or key in (83, 2555904, ord(".")):
             current = min(len(review.moves) - 1, current + 1)
+        elif action is not None and action.startswith("select_move_"):
+            try:
+                current = min(
+                    len(review.moves) - 1,
+                    max(0, int(action.removeprefix("select_move_"))),
+                )
+            except ValueError:
+                pass
+        elif action == "scroll_up":
+            scroll_start = review_scroll_start(
+                scroll_start,
+                len(review.moves),
+                -3,
+            )
+        elif action == "scroll_down":
+            scroll_start = review_scroll_start(
+                scroll_start,
+                len(review.moves),
+                3,
+            )
         elif action == "close" or key in (10, 13, 27):
             cv2.destroyWindow(window)
             return
+        if action in {"previous", "next"} or key in (
+            81,
+            83,
+            2424832,
+            2555904,
+            ord(","),
+            ord("."),
+        ):
+            scroll_start = ensure_review_move_visible(
+                current,
+                scroll_start,
+                len(review.moves),
+            )
         if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
             return
 
