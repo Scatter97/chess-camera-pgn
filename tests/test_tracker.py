@@ -11,6 +11,7 @@ from app import (
     frame_motion_score,
     manual_clock_player_for_key,
     pause_clock_for_illegal_move,
+    render_grid_verification,
     render_virtual_board,
     resume_clock_after_illegal_move,
     select_camera_backend,
@@ -27,10 +28,13 @@ from clock_reader import (
 )
 from chess_tracker import (
     RankedMove,
+    analyze_frame_consensus,
     board_looks_restored,
     legal_move_fit,
     move_changed_squares,
+    prepare_comparison_frame,
     rank_legal_moves,
+    select_consensus_move,
     write_pgn,
 )
 from game_rules import automatic_outcome, claimable_draw_reason
@@ -76,6 +80,68 @@ def test_fast_detection_profile_and_reduced_motion_score() -> None:
     changed[200:600, 200:600] = 255
     assert frame_motion_score(still, still) == 0.0
     assert frame_motion_score(still, changed) > 1.6
+
+
+def test_accuracy_boost_alignment_reduces_camera_and_light_noise() -> None:
+    rng = np.random.default_rng(16)
+    reference = rng.integers(20, 210, (800, 800, 3), dtype=np.uint8)
+    transform = np.float32([[1, 0, 4], [0, 1, -3]])
+    moved = cv2.warpAffine(
+        reference,
+        transform,
+        (800, 800),
+        borderMode=cv2.BORDER_REFLECT,
+    )
+    moved = np.clip(moved.astype(np.int16) + 18, 0, 255).astype(np.uint8)
+
+    prepared = prepare_comparison_frame(reference, moved)
+    raw_error = np.mean(
+        np.abs(reference[12:-12, 12:-12].astype(np.int16) - moved[12:-12, 12:-12])
+    )
+    prepared_error = np.mean(
+        np.abs(
+            reference[12:-12, 12:-12].astype(np.int16)
+            - prepared[12:-12, 12:-12]
+        )
+    )
+    assert prepared_error < raw_error * 0.35
+
+
+def test_accuracy_boost_requires_two_matching_frame_votes() -> None:
+    e4 = chess.Move.from_uci("e2e4")
+    d4 = chess.Move.from_uci("d2d4")
+    assert select_consensus_move([e4, e4, d4]) == e4
+    assert select_consensus_move([e4, d4]) is None
+
+
+def test_accuracy_consensus_finds_move_across_lighting_changes() -> None:
+    rng = np.random.default_rng(160)
+    reference = rng.integers(35, 195, (800, 800, 3), dtype=np.uint8)
+    changed = reference.copy()
+    changed[600:700, 400:500] = (245, 20, 210)  # e2
+    changed[400:500, 400:500] = (245, 20, 210)  # e4
+    frames = [
+        np.clip(changed.astype(np.int16) + offset, 0, 255).astype(np.uint8)
+        for offset in (-7, 0, 9)
+    ]
+
+    result = analyze_frame_consensus(
+        chess.Board(),
+        reference,
+        frames,
+        fit_threshold=0.66,
+    )
+
+    assert result.move == chess.Move.from_uci("e2e4")
+    assert result.valid_votes == 3
+    assert result.frame.shape == reference.shape
+
+
+def test_grid_verification_labels_all_squares() -> None:
+    board_image = np.zeros((800, 800, 3), dtype=np.uint8)
+    verification = render_grid_verification(board_image)
+    assert verification.shape == board_image.shape
+    assert np.count_nonzero(verification) > 5000
 
 
 def test_background_clock_reader_returns_tagged_result() -> None:
@@ -279,8 +345,10 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = apply_setup_action(setup, "black_plus10")
     setup = apply_setup_action(setup, "black_inc_plus")
     setup = apply_setup_action(setup, "mode_fast")
+    setup = apply_setup_action(setup, "accuracy_toggle")
     assert setup.fast_mode
     assert not setup.bullet_mode
+    assert setup.accuracy_boost
     setup = apply_setup_action(setup, "mode_bullet")
     setup = apply_setup_action(setup, "clock_switch_manual")
 
@@ -290,6 +358,7 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     assert setup.clock_settings.black_increment_seconds == 1
     assert setup.bullet_mode
     assert not setup.fast_mode
+    assert not setup.accuracy_boost
     assert setup.auto_accept
     assert setup.manual_clock_switch
 
