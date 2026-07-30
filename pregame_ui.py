@@ -25,6 +25,7 @@ class GameSetup:
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
     manual_clock_switch: bool = False
+    separate_time_controls: bool = False
     profile_name: str = "Default board"
     profile_samples: int = 0
     learning_enabled: bool = True
@@ -353,22 +354,49 @@ def render_setup_screen(
 
     draw_text(view, "Time control", (600, 96), (100, 220, 255), 0.68)
     enabled = setup.clock_source == "builtin"
-    clock_rows = [
+    advanced_button = Button(
+        "advanced_clock_toggle",
         (
-            "White",
-            setup.clock_settings.white_initial_seconds,
-            setup.clock_settings.white_increment_seconds,
-            128,
-            "white",
+            "Advanced: separate clocks"
+            if not setup.separate_time_controls
+            else "Use one shared clock"
         ),
-        (
-            "Black",
-            setup.clock_settings.black_initial_seconds,
-            setup.clock_settings.black_increment_seconds,
-            294,
-            "black",
-        ),
-    ]
+        800,
+        74,
+        260,
+        38,
+        setup.separate_time_controls,
+        enabled,
+    )
+    buttons.append(advanced_button)
+    draw_button(view, advanced_button)
+    if setup.separate_time_controls:
+        clock_rows = [
+            (
+                "White",
+                setup.clock_settings.white_initial_seconds,
+                setup.clock_settings.white_increment_seconds,
+                128,
+                "white",
+            ),
+            (
+                "Black",
+                setup.clock_settings.black_initial_seconds,
+                setup.clock_settings.black_increment_seconds,
+                294,
+                "black",
+            ),
+        ]
+    else:
+        clock_rows = [
+            (
+                "Both players",
+                setup.clock_settings.white_initial_seconds,
+                setup.clock_settings.white_increment_seconds,
+                150,
+                "shared",
+            )
+        ]
     for player, initial, increment, y, prefix in clock_rows:
         draw_text(view, player, (600, y), (235, 235, 235), 0.65)
         draw_text(
@@ -560,6 +588,20 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         return replace(setup, manual_clock_switch=False)
     if action == "clock_switch_manual" and setup.clock_source == "builtin":
         return replace(setup, manual_clock_switch=True)
+    if action == "advanced_clock_toggle" and setup.clock_source == "builtin":
+        if setup.separate_time_controls:
+            shared = ClockSettings(
+                setup.clock_settings.white_initial_seconds,
+                setup.clock_settings.white_initial_seconds,
+                setup.clock_settings.white_increment_seconds,
+                setup.clock_settings.white_increment_seconds,
+            )
+            return replace(
+                setup,
+                separate_time_controls=False,
+                clock_settings=shared,
+            )
+        return replace(setup, separate_time_controls=True)
     if action == "learning_toggle":
         return replace(setup, learning_enabled=not setup.learning_enabled)
 
@@ -571,6 +613,12 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         "black_increment_seconds": settings.black_increment_seconds,
     }
     adjustments = {
+        "shared_minus60": ("shared_initial_seconds", -60),
+        "shared_minus10": ("shared_initial_seconds", -10),
+        "shared_plus10": ("shared_initial_seconds", 10),
+        "shared_plus60": ("shared_initial_seconds", 60),
+        "shared_inc_minus": ("shared_increment_seconds", -1),
+        "shared_inc_plus": ("shared_increment_seconds", 1),
         "white_minus60": ("white_initial_seconds", -60),
         "white_minus10": ("white_initial_seconds", -10),
         "white_plus10": ("white_initial_seconds", 10),
@@ -588,6 +636,24 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
         return setup
 
     field, amount = adjustments[action]
+    if field == "shared_initial_seconds":
+        value = min(
+            10800,
+            max(1, values["white_initial_seconds"] + amount),
+        )
+        values["white_initial_seconds"] = value
+        values["black_initial_seconds"] = value
+        return replace(setup, clock_settings=ClockSettings(**values))
+    if field == "shared_increment_seconds":
+        value = min(
+            60,
+            max(0, values["white_increment_seconds"] + amount),
+        )
+        values["white_increment_seconds"] = value
+        values["black_increment_seconds"] = value
+        return replace(setup, clock_settings=ClockSettings(**values))
+    if not setup.separate_time_controls:
+        return setup
     maximum = 60 if "increment" in field else 10800
     minimum = 0 if "increment" in field else 1
     values[field] = min(maximum, max(minimum, values[field] + amount))
