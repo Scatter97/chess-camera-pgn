@@ -47,7 +47,7 @@ from chess_tracker import (
     warp_board,
     write_pgn,
 )
-from game_rules import automatic_outcome, claimable_draw_reason
+from game_rules import automatic_outcome, claimable_draw_reason, timeout_outcome
 from game_analysis import (
     PositionEvaluation,
     build_game_review,
@@ -431,6 +431,27 @@ def test_builtin_clock_undo_restores_movers_clock() -> None:
     assert clock.active_white is False
     assert clock.remaining(False, 130.0) == 105.0
     assert clock.remaining(True, 130.0) == 52.0
+
+
+def test_builtin_clock_reports_only_the_active_flagged_player() -> None:
+    clock = BuiltInChessClock(ClockSettings(5, 20))
+    clock.start(100.0, white_to_move=True)
+
+    assert clock.flagged_player(104.9) is None
+    assert clock.flagged_player(105.0) is chess.WHITE
+    clock.pause(105.0)
+    assert clock.flagged_player(200.0) is None
+
+
+def test_timeout_result_awards_the_game_to_the_opponent() -> None:
+    white_flag = timeout_outcome(True, "Alice", "Bob")
+    black_flag = timeout_outcome(False, "Alice", "Bob")
+
+    assert white_flag.result == "0-1"
+    assert white_flag.title == "Time expired"
+    assert white_flag.message == "Alice's time ran out. Bob wins."
+    assert black_flag.result == "1-0"
+    assert black_flag.message == "Bob's time ran out. Alice wins."
 
 
 def test_clickable_pregame_settings_update_clock_and_modes() -> None:
