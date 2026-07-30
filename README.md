@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 20)
+# Physical Chess Camera → Timed PGN (Revision 21)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,68 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 21: local post-game review
+
+After a completed game, click **Review game** to run a local Stockfish review.
+The review screen shows:
+
+- separate estimated accuracy percentages for White and Black;
+- the engine evaluation and centipawn loss after each move;
+- the engine's preferred move when it differs from the played move;
+- a virtual board that follows the selected reviewed move;
+- totals for Brilliant, Best, Excellent, Good, Inaccuracy, Mistake, Blunder,
+  and Miss classifications.
+
+Chess Camera uses transparent approximate labels:
+
+| Label | Chess Camera rule |
+| --- | --- |
+| Brilliant | Engine-best move with at most 15 cp loss and an apparent material sacrifice |
+| Best | Engine's first choice, or no more than 8 cp loss |
+| Excellent | No more than 25 cp loss |
+| Good | No more than 60 cp loss |
+| Inaccuracy | No more than 120 cp loss |
+| Mistake | No more than 250 cp loss |
+| Blunder | More than 250 cp loss |
+| Miss | Missed forced mate or a major winning opportunity |
+
+Move accuracy is calculated as `100 × exp(-centipawn loss / 250)`, then each
+player's move accuracies are averaged. These results will not exactly match
+Chess.com because Chess.com's complete classification and accuracy formulas
+are not part of this project.
+
+Analysis runs only after the game, at about 0.12 seconds per position by
+default, so it does not consume processing time during camera detection or
+clock operation. The result is stored in `games/latest_analysis.json`, with a
+timestamped copy beside it.
+
+### Installing Stockfish
+
+Stockfish is optional and is not bundled with this repository. Download the
+current version from the [official Stockfish download page](https://stockfishchess.org/get-sf).
+Then use one of these methods:
+
+1. Put the executable inside an `engines` folder in the project. Its filename
+   should begin with `stockfish`.
+2. Add the `stockfish` command to your system PATH.
+3. Pass its full path when launching:
+
+```text
+run_windows.bat --stockfish "C:\path\to\stockfish.exe"
+./run_ubuntu.sh --stockfish "/path/to/stockfish"
+./run_mac.command --stockfish "/path/to/stockfish"
+```
+
+On Ubuntu and macOS, make sure a manually downloaded binary is executable:
+
+```bash
+chmod +x /path/to/stockfish
+```
+
+The app displays a clear message if Stockfish is missing or cannot start.
+Stockfish is free, cross-platform software distributed under GPLv3. Chess
+Camera communicates with the separate executable through the UCI protocol.
 
 ## Revision 20: board profiles and guided learning
 
@@ -533,4 +595,5 @@ The main computer-vision and legal-move logic is in `chess_tracker.py`. Lichess
 clock OCR is in `clock_reader.py`. Built-in clock logic is in
 `builtin_clock.py`. Chess-ending rules are in `game_rules.py`. Clickable setup
 components are in `pregame_ui.py`. Board-profile persistence and learning are
-in `board_profiles.py`. The interface and camera loop are in `app.py`.
+in `board_profiles.py`. Stockfish review and scoring are in `game_analysis.py`.
+The interface and camera loop are in `app.py`.
