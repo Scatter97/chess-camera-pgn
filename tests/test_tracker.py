@@ -6,7 +6,7 @@ import chess.pgn
 import cv2
 import numpy as np
 
-from app import select_camera_backend
+from app import render_virtual_board, select_camera_backend
 from clock_reader import (
     BackgroundClockReader,
     BothClocks,
@@ -32,6 +32,18 @@ def test_native_camera_backends() -> None:
     assert select_camera_backend("linux2") == cv2.CAP_V4L2
     assert select_camera_backend("win32") == cv2.CAP_DSHOW
     assert select_camera_backend("darwin") == cv2.CAP_AVFOUNDATION
+
+
+def test_virtual_board_tracks_position_and_last_move() -> None:
+    board = chess.Board()
+    starting_view = render_virtual_board(board)
+    assert starting_view.shape == (620, 460, 3)
+
+    move = chess.Move.from_uci("e2e4")
+    board.push(move)
+    moved_view = render_virtual_board(board, move)
+    assert moved_view.shape == starting_view.shape
+    assert not np.array_equal(starting_view, moved_view)
 
 
 def test_background_clock_reader_returns_tagged_result() -> None:
