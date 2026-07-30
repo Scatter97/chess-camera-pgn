@@ -27,14 +27,19 @@ from clock_reader import (
     parse_clock_text,
 )
 from chess_tracker import (
+    BOARD_MARGIN_PIXELS,
     RankedMove,
+    WARP_PIXELS,
     analyze_frame_consensus,
     board_looks_restored,
     legal_move_fit,
     move_changed_squares,
+    orient_board_image,
     prepare_comparison_frame,
     rank_legal_moves,
     select_consensus_move,
+    square_change_scores,
+    warp_board,
     write_pgn,
 )
 from game_rules import automatic_outcome, claimable_draw_reason
@@ -116,10 +121,15 @@ def test_accuracy_boost_requires_two_matching_frame_votes() -> None:
 
 def test_accuracy_consensus_finds_move_across_lighting_changes() -> None:
     rng = np.random.default_rng(160)
-    reference = rng.integers(35, 195, (800, 800, 3), dtype=np.uint8)
+    reference = rng.integers(
+        35,
+        195,
+        (WARP_PIXELS, WARP_PIXELS, 3),
+        dtype=np.uint8,
+    )
     changed = reference.copy()
-    changed[600:700, 400:500] = (245, 20, 210)  # e2
-    changed[400:500, 400:500] = (245, 20, 210)  # e4
+    changed[675:775, 475:575] = (245, 20, 210)  # e2
+    changed[475:575, 475:575] = (245, 20, 210)  # e4
     frames = [
         np.clip(changed.astype(np.int16) + offset, 0, 255).astype(np.uint8)
         for offset in (-7, 0, 9)
@@ -138,10 +148,64 @@ def test_accuracy_consensus_finds_move_across_lighting_changes() -> None:
 
 
 def test_grid_verification_labels_all_squares() -> None:
-    board_image = np.zeros((800, 800, 3), dtype=np.uint8)
+    board_image = np.zeros(
+        (WARP_PIXELS, WARP_PIXELS, 3),
+        dtype=np.uint8,
+    )
     verification = render_grid_verification(board_image)
     assert verification.shape == board_image.shape
     assert np.count_nonzero(verification) > 5000
+
+
+def test_board_orientation_supports_all_four_camera_sides() -> None:
+    board_image = np.arange(27, dtype=np.uint8).reshape(3, 3, 3)
+    assert np.array_equal(
+        orient_board_image(board_image, "bottom"),
+        board_image,
+    )
+    assert np.array_equal(
+        orient_board_image(board_image, "top"),
+        cv2.rotate(board_image, cv2.ROTATE_180),
+    )
+    assert np.array_equal(
+        orient_board_image(board_image, "left"),
+        cv2.rotate(board_image, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    )
+    assert np.array_equal(
+        orient_board_image(board_image, "right"),
+        cv2.rotate(board_image, cv2.ROTATE_90_CLOCKWISE),
+    )
+
+
+def test_padded_warp_keeps_space_outside_board() -> None:
+    frame = np.zeros((300, 300, 3), dtype=np.uint8)
+    frame[50:251, 50:251] = (100, 150, 200)
+    corners = [[50, 50], [250, 50], [250, 250], [50, 250]]
+    warped = warp_board(frame, corners)
+
+    assert warped.shape == (WARP_PIXELS, WARP_PIXELS, 3)
+    assert BOARD_MARGIN_PIXELS > 0
+    assert np.mean(warped[BOARD_MARGIN_PIXELS + 20, BOARD_MARGIN_PIXELS + 20]) > 0
+
+
+def test_first_and_eighth_rank_changes_are_detected_in_outer_margin() -> None:
+    reference = np.zeros((WARP_PIXELS, WARP_PIXELS, 3), dtype=np.uint8)
+    current = reference.copy()
+    e_file_start = BOARD_MARGIN_PIXELS + 4 * 100
+    current[
+        BOARD_MARGIN_PIXELS + 800 : WARP_PIXELS,
+        e_file_start : e_file_start + 100,
+    ] = 255
+    current[
+        0:BOARD_MARGIN_PIXELS,
+        e_file_start : e_file_start + 100,
+    ] = 255
+
+    scores = square_change_scores(reference, current)
+
+    assert scores[chess.E1] > 7.0
+    assert scores[chess.E8] > 7.0
+    assert scores[chess.D1] == 0.0
 
 
 def test_background_clock_reader_returns_tagged_result() -> None:
@@ -346,9 +410,11 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = apply_setup_action(setup, "black_inc_plus")
     setup = apply_setup_action(setup, "mode_fast")
     setup = apply_setup_action(setup, "accuracy_toggle")
+    setup = apply_setup_action(setup, "white_edge_left")
     assert setup.fast_mode
     assert not setup.bullet_mode
     assert setup.accuracy_boost
+    assert setup.white_camera_edge == "left"
     setup = apply_setup_action(setup, "mode_bullet")
     setup = apply_setup_action(setup, "clock_switch_manual")
 
@@ -370,13 +436,19 @@ def test_pregame_text_fields_and_click_targets() -> None:
     screen, buttons = render_setup_screen(setup, "white")
 
     assert setup.white_name == "Josh"
-    assert screen.shape == (760, 1100, 3)
+    assert screen.shape == (820, 1100, 3)
     start = next(button for button in buttons if button.action == "start")
     manual_clock_option = next(
         button for button in buttons if button.action == "clock_switch_manual"
     )
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
     assert manual_clock_option.label == "Player keys A / L"
+    white_left = next(
+        button for button in buttons if button.action == "white_edge_left"
+    )
+    assert clicked_action(buttons, white_left.x + 5, white_left.y + 5) == (
+        "white_edge_left"
+    )
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
