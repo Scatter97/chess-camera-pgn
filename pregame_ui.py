@@ -30,6 +30,34 @@ DEFAULT_PINNED_TIME_CONTROLS: tuple[str, ...] = (
     "10+0",
     "15+10",
 )
+MINUTE_SLIDER_VALUES: tuple[int, ...] = (
+    1,
+    2,
+    3,
+    5,
+    10,
+    15,
+    20,
+    30,
+    45,
+    60,
+    90,
+    120,
+    180,
+)
+INCREMENT_SLIDER_VALUES: tuple[int, ...] = (
+    0,
+    1,
+    2,
+    3,
+    5,
+    10,
+    15,
+    20,
+    30,
+    45,
+    60,
+)
 
 
 @dataclass(frozen=True)
@@ -194,6 +222,96 @@ def toggle_pinned_time_control(
         for value, _initial, _increment in TIME_CONTROL_PRESETS
         if value in selected
     )
+
+
+def slider_value_from_x(action: str, button: Button, x: int) -> int:
+    """Convert a mouse position on a time slider into its integer value."""
+    values = (
+        MINUTE_SLIDER_VALUES
+        if action.endswith("_minutes")
+        else INCREMENT_SLIDER_VALUES
+    )
+    progress = min(1.0, max(0.0, (x - button.x) / max(1, button.width)))
+    index = int(round(progress * (len(values) - 1)))
+    return values[index]
+
+
+def apply_time_slider_value(
+    setup: GameSetup,
+    action: str,
+    value: int,
+) -> GameSetup:
+    """Apply one shared or advanced time-slider value."""
+    if setup.clock_source != "builtin" or not action.startswith("slider_"):
+        return setup
+    parts = action.split("_")
+    if len(parts) != 3:
+        return setup
+    _slider, player, field = parts
+    if player not in {"shared", "white", "black"}:
+        return setup
+    if field not in {"minutes", "increment"}:
+        return setup
+    if player != "shared" and not setup.separate_time_controls:
+        return setup
+    if player == "shared" and setup.separate_time_controls:
+        return setup
+
+    settings = setup.clock_settings
+    values = {
+        "white_initial_seconds": settings.white_initial_seconds,
+        "black_initial_seconds": settings.black_initial_seconds,
+        "white_increment_seconds": settings.white_increment_seconds,
+        "black_increment_seconds": settings.black_increment_seconds,
+    }
+    if field == "minutes":
+        adjusted = float(min(180, max(1, value)) * 60)
+        suffix = "initial_seconds"
+    else:
+        adjusted = float(min(60, max(0, value)))
+        suffix = "increment_seconds"
+    players = ("white", "black") if player == "shared" else (player,)
+    for selected_player in players:
+        values[f"{selected_player}_{suffix}"] = adjusted
+    return replace(setup, clock_settings=ClockSettings(**values))
+
+
+def _draw_time_slider(
+    image: np.ndarray,
+    buttons: list[Button],
+    action: str,
+    label: str,
+    value: int,
+    y: int,
+    enabled: bool,
+) -> None:
+    """Draw a Lichess-style labeled horizontal slider."""
+    label_color = (165, 175, 190) if enabled else (105, 110, 120)
+    value_color = (120, 255, 170) if enabled else (125, 130, 140)
+    draw_text(image, label, (600, y), label_color, 0.47)
+    draw_text(image, str(value), (1025, y), value_color, 0.52)
+    slider = Button(action, "", 600, y + 8, 460, 28, enabled=enabled)
+    buttons.append(slider)
+    track_y = y + 22
+    cv2.line(image, (608, track_y), (1052, track_y), (72, 77, 86), 10)
+    values = (
+        MINUTE_SLIDER_VALUES
+        if action.endswith("_minutes")
+        else INCREMENT_SLIDER_VALUES
+    )
+    nearest_index = min(
+        range(len(values)),
+        key=lambda index: abs(values[index] - value),
+    )
+    progress = nearest_index / max(1, len(values) - 1)
+    knob_x = int(round(608 + min(1.0, max(0.0, progress)) * 444))
+    if enabled:
+        cv2.line(image, (608, track_y), (knob_x, track_y), (78, 150, 105), 10)
+        knob_fill, knob_border = (120, 255, 170), (230, 245, 235)
+    else:
+        knob_fill, knob_border = (90, 94, 102), (125, 130, 140)
+    cv2.circle(image, (knob_x, track_y), 10, knob_fill, -1, cv2.LINE_AA)
+    cv2.circle(image, (knob_x, track_y), 10, knob_border, 2, cv2.LINE_AA)
 
 
 def _text_field(
@@ -435,14 +553,14 @@ def render_setup_screen(
                 "White",
                 setup.clock_settings.white_initial_seconds,
                 setup.clock_settings.white_increment_seconds,
-                128,
+                130,
                 "white",
             ),
             (
                 "Black",
                 setup.clock_settings.black_initial_seconds,
                 setup.clock_settings.black_increment_seconds,
-                294,
+                285,
                 "black",
             ),
         ]
@@ -452,7 +570,7 @@ def render_setup_screen(
                 "Both players",
                 setup.clock_settings.white_initial_seconds,
                 setup.clock_settings.white_increment_seconds,
-                150,
+                135,
                 "shared",
             )
         ]
@@ -465,49 +583,35 @@ def render_setup_screen(
             (120, 255, 170) if enabled else (135, 140, 150),
             0.61,
         )
-        draw_text(view, "Starting time", (600, y + 35), (165, 175, 190), 0.46)
-        controls = [
-            (f"{prefix}_minus60", "-1m"),
-            (f"{prefix}_minus10", "-10s"),
-            (f"{prefix}_plus10", "+10s"),
-            (f"{prefix}_plus60", "+1m"),
-        ]
-        for index, (action, label) in enumerate(controls):
-            button = Button(
-                action,
-                label,
-                600 + index * 112,
-                y + 48,
-                100,
-                39,
-                enabled=enabled,
-            )
-            buttons.append(button)
-            draw_button(view, button)
-        draw_text(view, "Increment", (600, y + 114), (165, 175, 190), 0.46)
-        for index, (action, label) in enumerate(
-            [(f"{prefix}_inc_minus", "-1s"), (f"{prefix}_inc_plus", "+1s")]
-        ):
-            button = Button(
-                action,
-                label,
-                720 + index * 130,
-                y + 96,
-                115,
-                39,
-                enabled=enabled,
-            )
-            buttons.append(button)
-            draw_button(view, button)
+        minute_y = y + 38
+        increment_y = y + (93 if setup.separate_time_controls else 98)
+        _draw_time_slider(
+            view,
+            buttons,
+            f"slider_{prefix}_minutes",
+            "Minutes per side" if prefix == "shared" else "Minutes",
+            max(1, min(180, int(round(initial / 60)))),
+            minute_y,
+            enabled,
+        )
+        _draw_time_slider(
+            view,
+            buttons,
+            f"slider_{prefix}_increment",
+            "Increment in seconds",
+            max(0, min(60, int(round(increment)))),
+            increment_y,
+            enabled,
+        )
 
     if not setup.separate_time_controls:
         preset_color = (165, 175, 190) if enabled else (105, 110, 120)
-        draw_text(view, "Pinned presets", (600, 342), preset_color, 0.49)
+        draw_text(view, "Pinned presets", (600, 310), preset_color, 0.49)
         choose_presets = Button(
             "choose_pinned_presets",
             "Choose pinned presets...",
             830,
-            315,
+            283,
             230,
             38,
             enabled=enabled,
@@ -532,7 +636,7 @@ def render_setup_screen(
                     f"apply_preset_{label}",
                     label,
                     600 + (index % 3) * 155,
-                    365 + (index // 3) * 48,
+                    333 + (index // 3) * 48,
                     140,
                     38,
                     active=selected,
@@ -544,7 +648,7 @@ def render_setup_screen(
             draw_text(
                 view,
                 "No presets pinned. Use Choose pinned presets...",
-                (600, 385),
+                (600, 353),
                 preset_color,
                 0.45,
             )
