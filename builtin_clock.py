@@ -112,6 +112,13 @@ class BuiltInChessClock:
         self.active_white = None
         self.started_at = None
 
+    def set_remaining(self, white_seconds: float, black_seconds: float) -> None:
+        """Set both paused clock faces without changing move history."""
+        if self.active_white is not None:
+            raise ValueError("Pause the clock before adjusting its remaining time.")
+        self.white_seconds = max(0.0, float(white_seconds))
+        self.black_seconds = max(0.0, float(black_seconds))
+
 
 class ManualClockController:
     """Coordinates a player's clock press with later camera move acceptance."""
