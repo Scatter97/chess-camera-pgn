@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 15)
+# Physical Chess Camera → Timed PGN (Revision 16)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -24,9 +24,36 @@ The game-settings screen contains clickable choices for:
 - which OCR clock display belongs to White;
 - separate starting times and increments for White and Black;
 - camera-controlled or player-controlled built-in clock switching;
-- board or phone recalibration.
+- board or phone recalibration;
+- optional three-frame Accuracy Boost;
+- a labeled 64-square calibration check.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 16: Accuracy Boost
+
+Turn on **Boost ON - 3 frames** in the game-settings screen when accuracy is
+more important than the lowest possible delay. It works with Normal and Fast
+detection and is automatically disabled in Bullet mode.
+
+Accuracy Boost:
+
+- compares three stable full-resolution board frames and requires at least two
+  readings to agree on the same legal move;
+- corrects small camera shifts of up to eight pixels;
+- compensates for a whole-frame brightness change before comparing squares;
+- uses a median of the three frames as the next saved board reference;
+- silently retries when the frame readings disagree instead of immediately
+  showing an illegal-move warning.
+
+The extra checks normally add about 0.12–0.25 seconds after the selected
+stability delay on a powerful laptop. They are especially useful with unusual
+pieces, reflections, and the temporary LEGO board used during development.
+
+Click **Check all 64 squares** before starting a game to open a live,
+perspective-corrected board with every square labeled. Confirm that each
+physical square and piece is fully inside the matching box. If the grid does
+not follow the board edges, close the check and click **Recalibrate board**.
 
 ## Illegal-move recovery
 
