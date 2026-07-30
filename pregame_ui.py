@@ -18,6 +18,7 @@ class GameSetup:
     black_name: str = "Black"
     event_name: str = "Camera-recorded game"
     clock_source: str = "ocr"
+    fast_mode: bool = False
     bullet_mode: bool = False
     auto_accept: bool = False
     bottom_clock_is_white: bool = True
@@ -248,16 +249,25 @@ def render_setup_screen(
                     "Normal",
                     155,
                     426,
-                    175,
+                    112,
                     42,
-                    not setup.bullet_mode,
+                    not setup.fast_mode and not setup.bullet_mode,
+                ),
+                Button(
+                    "mode_fast",
+                    "Fast",
+                    281,
+                    426,
+                    112,
+                    42,
+                    setup.fast_mode,
                 ),
                 Button(
                     "mode_bullet",
                     "Bullet",
-                    345,
+                    407,
                     426,
-                    175,
+                    113,
                     42,
                     setup.bullet_mode,
                 ),
@@ -427,9 +437,16 @@ def apply_setup_action(setup: GameSetup, action: str) -> GameSetup:
     if action == "clock_builtin":
         return replace(setup, clock_source="builtin")
     if action == "mode_normal":
-        return replace(setup, bullet_mode=False)
+        return replace(setup, fast_mode=False, bullet_mode=False)
+    if action == "mode_fast":
+        return replace(setup, fast_mode=True, bullet_mode=False)
     if action == "mode_bullet":
-        return replace(setup, bullet_mode=True, auto_accept=True)
+        return replace(
+            setup,
+            fast_mode=False,
+            bullet_mode=True,
+            auto_accept=True,
+        )
     if action == "auto_toggle" and not setup.bullet_mode:
         return replace(setup, auto_accept=not setup.auto_accept)
     if action == "mapping_bottom":
