@@ -500,8 +500,9 @@ def render_setup_screen(
             buttons.append(button)
             draw_button(view, button)
 
-    if enabled and not setup.separate_time_controls:
-        draw_text(view, "Pinned presets", (600, 342), (165, 175, 190), 0.49)
+    if not setup.separate_time_controls:
+        preset_color = (165, 175, 190) if enabled else (105, 110, 120)
+        draw_text(view, "Pinned presets", (600, 342), preset_color, 0.49)
         choose_presets = Button(
             "choose_pinned_presets",
             "Choose pinned presets...",
@@ -509,6 +510,7 @@ def render_setup_screen(
             315,
             230,
             38,
+            enabled=enabled,
         )
         buttons.append(choose_presets)
         draw_button(view, choose_presets)
@@ -534,6 +536,7 @@ def render_setup_screen(
                     140,
                     38,
                     active=selected,
+                    enabled=enabled,
                 )
                 buttons.append(button)
                 draw_button(view, button)
@@ -542,7 +545,7 @@ def render_setup_screen(
                 view,
                 "No presets pinned. Use Choose pinned presets...",
                 (600, 385),
-                (135, 145, 160),
+                preset_color,
                 0.45,
             )
 
