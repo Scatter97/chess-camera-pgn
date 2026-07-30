@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 9)
+# Physical Chess Camera → Timed PGN (Revision 10)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -60,7 +60,10 @@ This means:
 
 Castling, captures, en passant, checks, checkmates, and promotion are supported.
 For promotion, the camera cannot see which new piece was selected from square
-changes alone, so use Q, R, B, or N before confirming.
+changes alone. Revision 10 automatically opens a promotion popup with clickable
+Queen, Rook, Bishop, and Knight choices. Press Enter to choose Queen by
+default. The match-screen promotion buttons and Q/R/B/N shortcuts remain
+available if the selection needs to be corrected before accepting the move.
 
 ## Lichess phone-clock recognition
 
