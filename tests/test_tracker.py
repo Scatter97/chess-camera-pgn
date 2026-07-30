@@ -68,7 +68,9 @@ from pregame_ui import (
     GameSetup,
     apply_time_slider_value,
     apply_setup_action,
+    button_text_scale,
     clicked_action,
+    draw_button,
     normalize_pinned_time_controls,
     render_setup_screen,
     slider_value_from_x,
@@ -594,6 +596,20 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert rename.label == "Rename preset"
     assert reset.label == "Reset training"
     assert swap.label == "Swap sides"
+
+
+def test_long_button_label_is_drawn_inside_its_box() -> None:
+    button = Button("wrong_detection", "Detection wrong", 10, 15, 132, 34)
+
+    scale = button_text_scale(button)
+    text_width = cv2.getTextSize(
+        button.label,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        1,
+    )[0][0]
+    assert scale < 0.53
+    assert text_width <= button.width - 12
 
 
 def test_player_swap_and_editable_suggestions() -> None:
