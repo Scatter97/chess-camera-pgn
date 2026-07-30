@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 30)
+# Physical Chess Camera → Timed PGN (Revision 31)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,22 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 31: named presets and quicker game setup
+
+Board presets can now be renamed with **Rename preset**. **Reset training**
+shows a confirmation popup before clearing that preset's positive move
+examples, negative feedback, and learned camera noise. Its board/phone
+calibration, orientation, and other preset settings are preserved.
+
+The White, Black, and Event fields remember the values used to start previous
+games. Click a field to see its three most-used local suggestions, click a
+suggestion to fill it, or continue typing any new value. This history stays in
+`camera_config.json` on the computer.
+
+Use **Swap sides** beside the two player fields to exchange the White and Black
+names. It changes the PGN player assignment only; it does not change camera
+orientation or clock-display mapping.
 
 ## Revision 30: Bullet beta label
 
