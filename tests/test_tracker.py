@@ -10,6 +10,7 @@ import numpy as np
 
 from board_profiles import BoardProfile, BoardProfileStore
 from app import (
+    apply_midgame_clock_adjustment,
     detection_profile,
     frame_motion_score,
     illegal_warning_button,
@@ -429,6 +430,14 @@ def test_builtin_clock_undo_restores_movers_clock() -> None:
 def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = GameSetup()
     setup = apply_setup_action(setup, "clock_builtin")
+    setup = apply_setup_action(setup, "shared_minus60")
+    setup = apply_setup_action(setup, "shared_inc_plus")
+    assert setup.clock_settings.white_initial_seconds == 240
+    assert setup.clock_settings.black_initial_seconds == 240
+    assert setup.clock_settings.white_increment_seconds == 1
+    assert setup.clock_settings.black_increment_seconds == 1
+
+    setup = apply_setup_action(setup, "advanced_clock_toggle")
     setup = apply_setup_action(setup, "white_minus60")
     setup = apply_setup_action(setup, "black_plus10")
     setup = apply_setup_action(setup, "black_inc_plus")
@@ -443,14 +452,46 @@ def test_clickable_pregame_settings_update_clock_and_modes() -> None:
     setup = apply_setup_action(setup, "clock_switch_manual")
 
     assert setup.clock_source == "builtin"
-    assert setup.clock_settings.white_initial_seconds == 240
-    assert setup.clock_settings.black_initial_seconds == 310
-    assert setup.clock_settings.black_increment_seconds == 1
+    assert setup.separate_time_controls
+    assert setup.clock_settings.white_initial_seconds == 180
+    assert setup.clock_settings.black_initial_seconds == 250
+    assert setup.clock_settings.black_increment_seconds == 2
     assert setup.bullet_mode
     assert not setup.fast_mode
     assert not setup.accuracy_boost
     assert setup.auto_accept
     assert setup.manual_clock_switch
+
+
+def test_switching_back_to_shared_time_copies_white_settings() -> None:
+    setup = GameSetup(
+        clock_source="builtin",
+        separate_time_controls=True,
+        clock_settings=ClockSettings(180, 300, 2, 5),
+    )
+
+    setup = apply_setup_action(setup, "advanced_clock_toggle")
+
+    assert not setup.separate_time_controls
+    assert setup.clock_settings == ClockSettings(180, 180, 2, 2)
+
+
+def test_midgame_clock_adjustments_are_independent_and_clamped() -> None:
+    white, black = apply_midgame_clock_adjustment(5, 20, "white_minus10")
+    assert (white, black) == (0, 20)
+    white, black = apply_midgame_clock_adjustment(white, black, "black_plus60")
+    assert (white, black) == (0, 80)
+
+
+def test_paused_builtin_clock_can_be_set_to_exact_remaining_times() -> None:
+    clock = BuiltInChessClock(ClockSettings(60, 60))
+    clock.start(100.0, white_to_move=False)
+    clock.pause(110.0)
+
+    clock.set_remaining(75, 95)
+
+    assert clock.remaining(True, 200.0) == 75
+    assert clock.remaining(False, 200.0) == 95
 
 
 def test_pregame_text_fields_and_click_targets() -> None:
@@ -465,8 +506,12 @@ def test_pregame_text_fields_and_click_targets() -> None:
     manual_clock_option = next(
         button for button in buttons if button.action == "clock_switch_manual"
     )
+    advanced_clock = next(
+        button for button in buttons if button.action == "advanced_clock_toggle"
+    )
     assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
     assert manual_clock_option.label == "Player keys A / L"
+    assert advanced_clock.label == "Advanced: separate clocks"
     white_left = next(
         button for button in buttons if button.action == "white_edge_left"
     )
