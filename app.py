@@ -11,7 +11,12 @@ import chess
 import cv2
 import numpy as np
 
-from clock_reader import BackgroundClockReader, BothClocks, format_pgn_clock
+from clock_reader import (
+    BackgroundClockReader,
+    BothClocks,
+    detect_active_clock_side,
+    format_pgn_clock,
+)
 from chess_tracker import (
     BOARD_PIXELS,
     RankedMove,
@@ -28,6 +33,9 @@ from chess_tracker import (
 CONFIG_PATH = Path("camera_config.json")
 OUTPUT_PATH = Path("games/latest_game.pgn")
 STABLE_SECONDS = 1.15
+BULLET_STABLE_SECONDS = 0.22
+BULLET_SWITCH_SETTLE_SECONDS = 0.12
+BULLET_ACCEPT_COOLDOWN = 0.18
 AUTO_CONFIDENCE = 0.73
 MIN_CHANGE = 7.0
 LEGAL_FIT_THRESHOLD = 0.66
@@ -341,12 +349,16 @@ def main() -> None:
         pending_index = 0
         pending_frame: np.ndarray | None = None
         auto_accept = False
+        bullet_mode = False
         illegal_warning = False
         status = "Place all pieces in the starting position, then press S."
         last_accept_time = 0.0
         last_clock_request = 0.0
         latest_clocks: BothClocks | None = None
         clock_error: str | None = None
+        active_clock_side: str | None = None
+        last_active_clock_seen = 0.0
+        bullet_capture_due: float | None = None
         clock_worker = BackgroundClockReader()
 
         def collect_clock_results() -> None:
@@ -396,6 +408,17 @@ def main() -> None:
             ):
                 last_clock_request = now
 
+            if bullet_mode:
+                detected_side = detect_active_clock_side(raw, phone_corners)
+                if detected_side is not None:
+                    last_active_clock_seen = now
+                    if (
+                        active_clock_side is not None
+                        and detected_side != active_clock_side
+                    ):
+                        bullet_capture_due = now + BULLET_SWITCH_SETTLE_SECONDS
+                    active_clock_side = detected_side
+
             if previous is not None:
                 motion = float(
                     np.mean(
@@ -413,14 +436,43 @@ def main() -> None:
                         status = "Waiting for hands and pieces to stop moving..."
             previous = warped.copy()
 
+            stable_requirement = (
+                BULLET_STABLE_SECONDS if bullet_mode else STABLE_SECONDS
+            )
+            stability_ready = (
+                stable_since is not None
+                and now - stable_since >= stable_requirement
+            )
+            clock_boundary_ready = (
+                bullet_mode
+                and bullet_capture_due is not None
+                and now >= bullet_capture_due
+            )
+            clock_side_available = (
+                bullet_mode and now - last_active_clock_seen < 0.5
+            )
+            if illegal_warning:
+                # Always allow a stable restored board to clear the warning.
+                analysis_ready = stability_ready
+            else:
+                analysis_ready = (
+                    clock_boundary_ready
+                    if bullet_mode and clock_side_available
+                    else stability_ready
+                )
+            accept_cooldown = (
+                BULLET_ACCEPT_COOLDOWN if bullet_mode else 1.0
+            )
+
             scores: dict[int, float] = {}
             if (
                 reference is not None
                 and not pending
-                and stable_since is not None
-                and now - stable_since >= STABLE_SECONDS
-                and now - last_accept_time >= 1.0
+                and analysis_ready
+                and now - last_accept_time >= accept_cooldown
             ):
+                if clock_boundary_ready:
+                    bullet_capture_due = None
                 scores = square_change_scores(reference, warped)
                 strongest_change = max(scores.values(), default=0.0)
 
@@ -461,7 +513,10 @@ def main() -> None:
                                 f"Candidate: {board.san(candidate)} "
                                 f"(confidence {confidence:.0%}). ENTER accepts; arrows change."
                             )
-                            if auto_accept and confidence >= AUTO_CONFIDENCE:
+                            should_auto_accept = bullet_mode or (
+                                auto_accept and confidence >= AUTO_CONFIDENCE
+                            )
+                            if should_auto_accept:
                                 move_index = len(moves)
                                 token = next_clock_token
                                 next_clock_token += 1
@@ -487,7 +542,8 @@ def main() -> None:
                                 save_game(moves, move_clocks)
                                 last_accept_time = now
                                 stable_since = None
-                                status = f"Auto-recorded {format_moves(moves)}"
+                                prefix = "Bullet-recorded" if bullet_mode else "Auto-recorded"
+                                status = f"{prefix} {format_moves(moves)}"
 
             selected = pending[pending_index] if pending else None
             highlighted = set(selected.expected_squares) if selected else set()
@@ -499,7 +555,20 @@ def main() -> None:
             put_text(panel, "Physical Chess to PGN", (25, 40), (100, 220, 255), 0.85)
             put_text(panel, f"Turn: {'White' if board.turn else 'Black'}", (25, 82))
             put_text(panel, f"Moves: {len(moves)}", (25, 112))
-            put_text(panel, f"Auto accept: {'ON' if auto_accept else 'OFF'}", (25, 142))
+            if bullet_mode:
+                put_text(
+                    panel,
+                    "Mode: BULLET - LOWER ACCURACY",
+                    (25, 142),
+                    (0, 165, 255),
+                    0.58,
+                )
+            else:
+                put_text(
+                    panel,
+                    f"Auto accept: {'ON' if auto_accept else 'OFF'}",
+                    (25, 142),
+                )
             if latest_clocks is not None:
                 white_reading = (
                     latest_clocks.bottom
@@ -566,7 +635,7 @@ def main() -> None:
             controls = [
                 "ENTER accept | arrows candidate",
                 "Q/R/B/N promotion | U undo",
-                "A auto accept | S new game",
+                "A auto | B bullet mode | S new",
                 "C calibrate all | K phone only",
                 "F swap clock sides | ESC quit",
             ]
@@ -603,6 +672,21 @@ def main() -> None:
                     "Clock sides swapped. "
                     + ("Bottom is White." if bottom_clock_is_white else "Top is White.")
                 )
+            elif key == ord("b"):
+                if moves:
+                    status = "Press S to start a new game before changing modes."
+                else:
+                    bullet_mode = not bullet_mode
+                    active_clock_side = None
+                    last_active_clock_seen = 0.0
+                    bullet_capture_due = None
+                    stable_since = None
+                    if bullet_mode:
+                        status = (
+                            "Bullet Mode ON: automatic recording and lower accuracy."
+                        )
+                    else:
+                        status = "Normal accuracy mode restored."
             elif key == ord("s"):
                 board.reset()
                 moves.clear()
@@ -617,8 +701,14 @@ def main() -> None:
                 stable_since = None
                 status = "Game started. Make White's first move."
             elif key == ord("a"):
-                auto_accept = not auto_accept
-                status = f"Automatic confirmation {'enabled' if auto_accept else 'disabled'}."
+                if bullet_mode:
+                    status = "Bullet Mode always uses automatic confirmation."
+                else:
+                    auto_accept = not auto_accept
+                    status = (
+                        f"Automatic confirmation "
+                        f"{'enabled' if auto_accept else 'disabled'}."
+                    )
             elif key == ord("u") and moves:
                 moves.pop()
                 move_clocks.pop()
