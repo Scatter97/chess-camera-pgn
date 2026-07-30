@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 33)
+# Physical Chess Camera → Timed PGN (Revision 34)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,23 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 34: interactive Stockfish review
+
+The post-game review now includes:
+
+- a green arrow on the review board showing Stockfish's suggested move from the
+  position before the selected move;
+- a vertical evaluation bar for every move, with signed White-perspective text
+  such as `+0.75` or `-1.20`;
+- average centipawn loss (ACPL) for White and Black beside their accuracy;
+- a move list whose rows can be clicked to open that position;
+- mouse-wheel scrolling and clickable up/down controls for longer games.
+
+The player-side swap control now uses one upward and one downward arrow instead
+of text. Player and event suggestion buttons also expand to fit longer saved
+values whenever space is available, rather than leaving text outside a short
+background.
 
 ## Revision 33: cleaner camera preview
 
