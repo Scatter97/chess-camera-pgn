@@ -29,6 +29,7 @@ from chess_tracker import (
     warp_board,
     write_pgn,
 )
+from game_rules import GameOutcome, automatic_outcome, claimable_draw_reasons
 from pregame_ui import (
     Button,
     GameSetup,
@@ -512,8 +513,15 @@ def save_game(
     moves: list[chess.Move],
     clocks: list[float | None],
     headers: dict[str, str] | None = None,
+    result: str = "*",
 ) -> None:
-    write_pgn(moves, OUTPUT_PATH, clocks=clocks, headers=headers)
+    write_pgn(
+        moves,
+        OUTPUT_PATH,
+        result=result,
+        clocks=clocks,
+        headers=headers,
+    )
 
 
 def reading_label(reading: object) -> str:
@@ -792,6 +800,92 @@ def draw_wrapped_text(
         put_text(image, line, (x, y + row * 24), color, scale)
 
 
+def show_result_popup(title: str, message: str) -> None:
+    window = f"Game result - {title}"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 680, 280)
+    ok_button = Button("ok", "OK", 250, 198, 180, 52, active=True)
+    clicks: list[str] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event == cv2.EVENT_LBUTTONUP and ok_button.contains(x, y):
+            clicks.append("ok")
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        view = np.zeros((280, 680, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        put_text(view, title, (34, 52), (100, 220, 255), 0.92)
+        draw_wrapped_text(view, message, 34, 103, 62, max_lines=3, scale=0.58)
+        draw_button(view, ok_button)
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        if clicks or key in (10, 13, 27):
+            cv2.destroyWindow(window)
+            return
+        if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
+            return
+
+
+def ask_yes_no(title: str, message: str) -> bool:
+    window = title
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 680, 300)
+    buttons = [
+        Button("yes", "YES", 135, 216, 180, 54, active=True),
+        Button("no", "NO", 365, 216, 180, 54),
+    ]
+    clicks: list[str] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(buttons, x, y)
+        if action is not None:
+            clicks.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        view = np.zeros((300, 680, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        put_text(view, title, (34, 52), (100, 220, 255), 0.86)
+        draw_wrapped_text(view, message, 34, 103, 62, max_lines=4, scale=0.56)
+        for button in buttons:
+            draw_button(view, button)
+        put_text(view, "Keyboard: Y / N", (256, 292), (150, 160, 175), 0.43)
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = clicks.pop(0) if clicks else None
+        if action == "yes" or key == ord("y"):
+            cv2.destroyWindow(window)
+            return True
+        if action == "no" or key in (ord("n"), 10, 13, 27):
+            cv2.destroyWindow(window)
+            return False
+        if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
+            return False
+
+
+def ask_both_players_for_draw(
+    reason: str,
+    white_name: str,
+    black_name: str,
+) -> bool:
+    white_accepts = ask_yes_no(
+        reason,
+        f"{white_name or 'White'}: Do you agree to a draw?",
+    )
+    black_accepts = ask_yes_no(
+        reason,
+        f"{black_name or 'Black'}: Do you agree to a draw?",
+    )
+    return white_accepts and black_accepts
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record a physical chess game as PGN.")
     parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
@@ -862,6 +956,9 @@ def main() -> None:
         clock_worker = BackgroundClockReader()
         game_buttons: list[Button] = []
         game_click_queue: list[str] = []
+        game_result = "*"
+        game_finished = False
+        dismissed_draw_claims: set[str] = set()
 
         def collect_clock_results() -> None:
             nonlocal latest_clocks, clock_error
@@ -892,7 +989,65 @@ def main() -> None:
                         )
                         clock_updated = True
             if clock_updated:
-                save_game(moves, move_clocks, setup.pgn_headers())
+                save_game(
+                    moves,
+                    move_clocks,
+                    setup.pgn_headers(),
+                    game_result,
+                )
+
+        def finish_game(outcome: GameOutcome, event_time: float) -> None:
+            nonlocal game_result, game_finished, status
+            game_result = outcome.result
+            game_finished = True
+            if clock_source == "builtin":
+                builtin_clock.pause(event_time)
+            status = outcome.message
+            save_game(
+                moves,
+                move_clocks,
+                setup.pgn_headers(),
+                game_result,
+            )
+            show_result_popup(outcome.title, outcome.message)
+
+        def evaluate_position(event_time: float) -> bool:
+            nonlocal status
+            outcome = automatic_outcome(board)
+            if outcome is not None:
+                finish_game(outcome, event_time)
+                return True
+
+            reasons = [
+                reason
+                for reason in claimable_draw_reasons(board)
+                if reason not in dismissed_draw_claims
+            ]
+            if not reasons:
+                return False
+            if clock_source == "builtin":
+                builtin_clock.pause(event_time)
+            for reason in reasons:
+                accepted = ask_both_players_for_draw(
+                    reason,
+                    setup.white_name,
+                    setup.black_name,
+                )
+                if accepted:
+                    finish_game(
+                        GameOutcome(
+                            "1/2-1/2",
+                            reason,
+                            f"Draw agreed by both players under the {reason.lower()}.",
+                        ),
+                        time.monotonic(),
+                    )
+                    return True
+                dismissed_draw_claims.add(reason)
+                status = f"{reason} draw declined. The game continues."
+            if clock_source == "builtin":
+                builtin_clock.start(time.monotonic(), board.turn)
+            return True
 
         cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
 
@@ -925,10 +1080,18 @@ def main() -> None:
                 pending_frame = None
                 pending_event_time = None
                 illegal_warning = False
+                game_result = "*"
+                game_finished = False
+                dismissed_draw_claims.clear()
                 builtin_clock.reset(builtin_settings)
                 if clock_source == "builtin":
                     builtin_clock.start(now, white_to_move=True)
-                save_game(moves, move_clocks, setup.pgn_headers())
+                save_game(
+                    moves,
+                    move_clocks,
+                    setup.pgn_headers(),
+                    game_result,
+                )
                 last_accept_time = now
                 stable_since = None
                 status = (
@@ -1009,6 +1172,7 @@ def main() -> None:
             if (
                 reference is not None
                 and not pending
+                and not game_finished
                 and analysis_ready
                 and now - last_accept_time >= accept_cooldown
             ):
@@ -1098,22 +1262,22 @@ def main() -> None:
                                     )
                                 board.push(candidate)
                                 moves.append(candidate)
-                                if (
-                                    clock_source == "builtin"
-                                    and board.is_game_over()
-                                ):
-                                    builtin_clock.pause(event_time)
+                                position_notice = evaluate_position(event_time)
                                 reference = pending_frame.copy()
                                 pending.clear()
                                 pending_frame = None
                                 pending_event_time = None
                                 save_game(
-                                    moves, move_clocks, setup.pgn_headers()
+                                    moves,
+                                    move_clocks,
+                                    setup.pgn_headers(),
+                                    game_result,
                                 )
                                 last_accept_time = now
                                 stable_since = None
                                 prefix = "Bullet-recorded" if bullet_mode else "Auto-recorded"
-                                status = f"{prefix} {format_moves(moves)}"
+                                if not game_finished and not position_notice:
+                                    status = f"{prefix} {format_moves(moves)}"
 
             selected = pending[pending_index] if pending else None
             highlighted = set(selected.expected_squares) if selected else set()
@@ -1199,7 +1363,15 @@ def main() -> None:
             )
             put_text(panel, source_label, (260, 172), (120, 220, 255), 0.46)
 
-            if selected:
+            if game_finished:
+                put_text(
+                    panel,
+                    f"GAME OVER  {game_result}",
+                    (22, 213),
+                    (80, 120, 255),
+                    0.68,
+                )
+            elif selected:
                 put_text(
                     panel,
                     f"Selected: {board.san(selected.move)} [{selected.move.uci()}]",
@@ -1241,9 +1413,9 @@ def main() -> None:
                 (620, CAMERA_PANEL_WIDTH, 3), dtype=np.uint8
             )
             camera_panel[:] = (25, 28, 34)
-            camera_preview = cv2.resize(board_view, (300, 300))
-            camera_panel[:300] = camera_preview
-            cv2.rectangle(camera_panel, (0, 0), (299, 299), (115, 125, 142), 2)
+            camera_preview = cv2.resize(board_view, (280, 280))
+            camera_panel[:280, 10:290] = camera_preview
+            cv2.rectangle(camera_panel, (10, 0), (289, 279), (115, 125, 142), 2)
             put_text(
                 camera_panel,
                 "SMALL CAMERA PREVIEW",
@@ -1255,15 +1427,17 @@ def main() -> None:
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
             game_buttons = [
-                Button("accept", "ACCEPT MOVE", button_x, 316, 276, 48, active=bool(pending), enabled=bool(pending)),
-                Button("previous", "Previous", button_x, 376, 132, 42, enabled=bool(pending)),
-                Button("next", "Next", button_x + 144, 376, 132, 42, enabled=bool(pending)),
-                Button("promote_q", "Queen", button_x, 430, 132, 40, enabled=bool(pending)),
-                Button("promote_r", "Rook", button_x + 144, 430, 132, 40, enabled=bool(pending)),
-                Button("promote_b", "Bishop", button_x, 480, 132, 40, enabled=bool(pending)),
-                Button("promote_n", "Knight", button_x + 144, 480, 132, 40, enabled=bool(pending)),
-                Button("undo", "Undo", button_x, 532, 132, 42, enabled=bool(moves)),
-                Button("new_game", "New game", button_x + 144, 532, 132, 42),
+                Button("accept", "ACCEPT MOVE", button_x, 292, 276, 42, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
+                Button("previous", "Previous", button_x, 344, 132, 38, enabled=bool(pending) and not game_finished),
+                Button("next", "Next", button_x + 144, 344, 132, 38, enabled=bool(pending) and not game_finished),
+                Button("promote_q", "Queen", button_x, 392, 132, 36, enabled=bool(pending) and not game_finished),
+                Button("promote_r", "Rook", button_x + 144, 392, 132, 36, enabled=bool(pending) and not game_finished),
+                Button("promote_b", "Bishop", button_x, 438, 132, 36, enabled=bool(pending) and not game_finished),
+                Button("promote_n", "Knight", button_x + 144, 438, 132, 36, enabled=bool(pending) and not game_finished),
+                Button("undo", "Undo", button_x, 486, 132, 38, enabled=bool(moves)),
+                Button("new_game", "New game", button_x + 144, 486, 132, 38),
+                Button("offer_draw", "Offer draw", button_x, 534, 132, 38, enabled=not game_finished),
+                Button("resign", "Resign", button_x + 144, 534, 132, 38, enabled=not game_finished),
                 Button("quit", "Finish & save", button_x, 582, 276, 30),
             ]
             for game_button in game_buttons:
@@ -1288,6 +1462,62 @@ def main() -> None:
             if click_action in key_for_action:
                 key = key_for_action[click_action]
 
+            if click_action == "offer_draw" and not game_finished:
+                offering_white = board.turn == chess.WHITE
+                offerer = (
+                    setup.white_name if offering_white else setup.black_name
+                ) or ("White" if offering_white else "Black")
+                opponent = (
+                    setup.black_name if offering_white else setup.white_name
+                ) or ("Black" if offering_white else "White")
+                if clock_source == "builtin":
+                    builtin_clock.pause(now)
+                accepted = ask_yes_no(
+                    "Draw offer",
+                    f"{offerer} offers a draw. {opponent}: Do you accept?",
+                )
+                if accepted:
+                    finish_game(
+                        GameOutcome(
+                            "1/2-1/2",
+                            "Draw agreed",
+                            "The players agreed to a draw.",
+                        ),
+                        time.monotonic(),
+                    )
+                else:
+                    if clock_source == "builtin":
+                        builtin_clock.start(time.monotonic(), board.turn)
+                    status = f"{opponent} declined the draw offer."
+                continue
+            if click_action == "resign" and not game_finished:
+                resigning_white = board.turn == chess.WHITE
+                resigner = (
+                    setup.white_name if resigning_white else setup.black_name
+                ) or ("White" if resigning_white else "Black")
+                winner = (
+                    setup.black_name if resigning_white else setup.white_name
+                ) or ("Black" if resigning_white else "White")
+                if clock_source == "builtin":
+                    builtin_clock.pause(now)
+                confirmed = ask_yes_no(
+                    "Confirm resignation",
+                    f"{resigner}: Are you sure you want to resign?",
+                )
+                if confirmed:
+                    finish_game(
+                        GameOutcome(
+                            "0-1" if resigning_white else "1-0",
+                            "Resignation",
+                            f"{resigner} resigned. {winner} wins.",
+                        ),
+                        time.monotonic(),
+                    )
+                else:
+                    if clock_source == "builtin":
+                        builtin_clock.start(time.monotonic(), board.turn)
+                    status = "Resignation cancelled."
+                continue
             if key in (27, ord("x")):
                 break
             if key in (
@@ -1335,6 +1565,9 @@ def main() -> None:
                 moves.pop()
                 move_clocks.pop()
                 move_clock_tokens.pop()
+                game_result = "*"
+                game_finished = False
+                dismissed_draw_claims.clear()
                 board.reset()
                 for move in moves:
                     board.push(move)
@@ -1345,7 +1578,12 @@ def main() -> None:
                 pending_frame = None
                 pending_event_time = None
                 illegal_warning = False
-                save_game(moves, move_clocks, setup.pgn_headers())
+                save_game(
+                    moves,
+                    move_clocks,
+                    setup.pgn_headers(),
+                    game_result,
+                )
                 last_accept_time = now
                 status = "Last move removed. Board view resynchronized."
             elif pending and key in (81, 2424832, ord(",")):
@@ -1397,27 +1635,33 @@ def main() -> None:
                         )
                     board.push(selected_move)
                     moves.append(selected_move)
-                    if clock_source == "builtin" and board.is_game_over():
-                        builtin_clock.pause(event_time)
+                    position_notice = evaluate_position(event_time)
                     reference = pending_frame.copy()
                     pending.clear()
                     pending_frame = None
                     pending_event_time = None
-                    save_game(moves, move_clocks, setup.pgn_headers())
+                    save_game(
+                        moves,
+                        move_clocks,
+                        setup.pgn_headers(),
+                        game_result,
+                    )
                     last_accept_time = now
                     stable_since = None
-                    status = f"Recorded {san}. Recent: {format_moves(moves)}"
+                    if not game_finished and not position_notice:
+                        status = f"Recorded {san}. Recent: {format_moves(moves)}"
 
         # Finish exact move-time captures before writing the final timestamped PGN.
         clock_worker.close()
         collect_clock_results()
-        if moves:
+        if moves or game_result != "*":
             timestamped = Path("games") / (
                 datetime.now().strftime("game_%Y-%m-%d_%H-%M-%S") + ".pgn"
             )
             write_pgn(
                 moves,
                 timestamped,
+                result=game_result,
                 clocks=move_clocks,
                 headers=setup.pgn_headers(),
             )
