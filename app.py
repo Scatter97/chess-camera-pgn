@@ -406,6 +406,108 @@ def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
     return view
 
 
+def select_promotion_candidate(
+    candidates: list[RankedMove],
+    piece_type: chess.PieceType,
+) -> list[RankedMove]:
+    """Apply one promotion choice and remove duplicate piece variants."""
+    if not candidates or candidates[0].move.promotion is None:
+        return candidates
+
+    primary = candidates[0]
+    chosen_move = move_with_promotion(primary.move, piece_type)
+    chosen = RankedMove(chosen_move, primary.score, primary.expected_squares)
+    remaining = [
+        candidate
+        for candidate in candidates[1:]
+        if not (
+            candidate.move.from_square == primary.move.from_square
+            and candidate.move.to_square == primary.move.to_square
+            and candidate.move.promotion is not None
+        )
+    ]
+    return [chosen, *remaining]
+
+
+def choose_promotion_piece() -> chess.PieceType:
+    """Show a modal promotion chooser; Enter and window-close default to Queen."""
+    window = "Choose promotion piece"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 640, 260)
+    buttons = [
+        Button("queen", "QUEEN", 28, 122, 135, 70, active=True),
+        Button("rook", "ROOK", 178, 122, 135, 70),
+        Button("bishop", "BISHOP", 328, 122, 135, 70),
+        Button("knight", "KNIGHT", 478, 122, 135, 70),
+    ]
+    click_queue: list[str] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    piece_for_action = {
+        "queen": chess.QUEEN,
+        "rook": chess.ROOK,
+        "bishop": chess.BISHOP,
+        "knight": chess.KNIGHT,
+    }
+    key_for_piece = {
+        ord("q"): chess.QUEEN,
+        ord("r"): chess.ROOK,
+        ord("b"): chess.BISHOP,
+        ord("n"): chess.KNIGHT,
+    }
+
+    while True:
+        view = np.zeros((260, 640, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        put_text(
+            view,
+            "Pawn promotion",
+            (28, 43),
+            (100, 220, 255),
+            0.9,
+        )
+        put_text(
+            view,
+            "Choose a piece. Press ENTER for the default Queen.",
+            (28, 83),
+            (225, 225, 230),
+            0.57,
+        )
+        for button in buttons:
+            draw_button(view, button)
+        put_text(
+            view,
+            "Keyboard: Q / R / B / N",
+            (205, 231),
+            (160, 170, 185),
+            0.48,
+        )
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+
+        if action in piece_for_action:
+            cv2.destroyWindow(window)
+            return piece_for_action[action]
+        if key in (10, 13):
+            cv2.destroyWindow(window)
+            return chess.QUEEN
+        if key in key_for_piece:
+            cv2.destroyWindow(window)
+            return key_for_piece[key]
+        if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
+            return chess.QUEEN
+
+
 def save_game(
     moves: list[chess.Move],
     clocks: list[float | None],
@@ -955,6 +1057,12 @@ def main() -> None:
                         confidence = confidence_for(pending, scores)
                         if pending:
                             candidate = pending[0].move
+                            if candidate.promotion is not None:
+                                chosen_piece = choose_promotion_piece()
+                                pending = select_promotion_candidate(
+                                    pending, chosen_piece
+                                )
+                                candidate = pending[0].move
                             status = (
                                 f"Candidate: {board.san(candidate)} "
                                 f"(confidence {confidence:.0%}). ENTER accepts; arrows change."
