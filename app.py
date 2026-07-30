@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +12,11 @@ import chess
 import cv2
 import numpy as np
 
+from board_profiles import (
+    GUIDED_TRAINING_LINE,
+    BoardProfile,
+    BoardProfileStore,
+)
 from builtin_clock import BuiltInChessClock, ClockSettings, ManualClockController
 from clock_reader import (
     BackgroundClockReader,
@@ -27,6 +33,7 @@ from chess_tracker import (
     board_looks_restored,
     confidence_for,
     legal_move_fit,
+    move_changed_squares,
     move_with_promotion,
     orient_board_image,
     rank_legal_moves,
@@ -47,6 +54,7 @@ from pregame_ui import (
 
 
 CONFIG_PATH = Path("camera_config.json")
+PROFILE_DIRECTORY = Path("board_profiles")
 OUTPUT_PATH = Path("games/latest_game.pgn")
 STABLE_SECONDS = 1.15
 FAST_STABLE_SECONDS = 0.35
@@ -202,6 +210,7 @@ def save_config(
     phone_corners: list[list[float]],
     bottom_clock_is_white: bool,
     white_camera_edge: str,
+    active_profile: str = "Default board",
 ) -> None:
     CONFIG_PATH.write_text(
         json.dumps(
@@ -210,6 +219,7 @@ def save_config(
                 "phone_corners": phone_corners,
                 "bottom_clock_is_white": bottom_clock_is_white,
                 "white_camera_edge": white_camera_edge,
+                "active_profile": active_profile,
             },
             indent=2,
         ),
@@ -294,6 +304,138 @@ def show_grid_verification(
         if key in (10, 13, 27):
             cv2.destroyWindow(window)
             return
+
+
+def run_guided_move_training(
+    capture: cv2.VideoCapture,
+    board_corners: list[list[float]],
+    white_camera_edge: str,
+    profile: BoardProfile,
+    profile_store: BoardProfileStore,
+) -> int:
+    """Ask for a legal move sequence and learn each before/after signature."""
+    window = "Chess Camera - Guided Board Training"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 1100, 760)
+    click_queue: list[str] = []
+    current_buttons: list[Button] = []
+    board = chess.Board()
+    reference: np.ndarray | None = None
+    step = 0
+    recorded = 0
+    message = "Set up the normal starting position, then capture the baseline."
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(current_buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+
+    while True:
+        ok, raw = capture.read()
+        if not ok:
+            continue
+        warped = orient_board_image(
+            warp_board(raw, board_corners),
+            white_camera_edge,
+        )
+        screen = np.zeros((760, 1100, 3), dtype=np.uint8)
+        screen[:] = (28, 31, 37)
+        preview = cv2.resize(draw_grid(warped, set()), (700, 700))
+        screen[30:730, 20:720] = preview
+        put_text(
+            screen,
+            f"Train profile: {profile.name}",
+            (750, 50),
+            (100, 220, 255),
+            0.72,
+        )
+        put_text(
+            screen,
+            f"Saved samples: {profile.sample_count}",
+            (750, 82),
+            (165, 175, 190),
+            0.5,
+        )
+
+        current_buttons = []
+        if reference is None:
+            put_text(screen, "1. Arrange the starting position.", (750, 135), scale=0.52)
+            put_text(screen, "2. Remove both hands.", (750, 165), scale=0.52)
+            begin = Button("baseline", "CAPTURE START", 750, 205, 300, 52, active=True)
+            current_buttons.append(begin)
+            draw_button(screen, begin)
+        elif step < len(GUIDED_TRAINING_LINE):
+            move = chess.Move.from_uci(GUIDED_TRAINING_LINE[step])
+            san = board.san(move)
+            put_text(
+                screen,
+                f"Move {step + 1}/{len(GUIDED_TRAINING_LINE)}",
+                (750, 135),
+                (165, 175, 190),
+                0.5,
+            )
+            put_text(screen, f"Please play: {san}", (750, 185), (120, 255, 170), 0.78)
+            put_text(screen, f"Squares: {move.uci()}", (750, 220), scale=0.55)
+            put_text(screen, "Then remove your hand and click", (750, 270), scale=0.48)
+            record = Button("record", "RECORD THIS MOVE", 750, 300, 300, 52, active=True)
+            current_buttons.append(record)
+            draw_button(screen, record)
+        else:
+            put_text(screen, "Training complete", (750, 155), (120, 255, 170), 0.78)
+            put_text(screen, "Reset the physical board before", (750, 205), scale=0.5)
+            put_text(screen, "starting a game.", (750, 235), scale=0.5)
+
+        finish = Button(
+            "finish_training",
+            "FINISH",
+            750,
+            620,
+            145,
+            48,
+            active=step >= len(GUIDED_TRAINING_LINE),
+        )
+        current_buttons.append(finish)
+        draw_button(screen, finish)
+        put_text(
+            screen,
+            message[:43],
+            (750, 570),
+            (100, 220, 255),
+            0.45,
+        )
+        cv2.imshow(window, screen)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+
+        if action == "baseline":
+            reference = warped.copy()
+            message = "Baseline saved. Make the requested move."
+            continue
+        if action == "record" and reference is not None:
+            move = chess.Move.from_uci(GUIDED_TRAINING_LINE[step])
+            expected = move_changed_squares(board, move)
+            scores = square_change_scores(reference, warped)
+            fit = legal_move_fit(RankedMove(move, 0.0, expected), scores)
+            if fit.score < 0.60:
+                message = "Could not verify that move. Check it and try again."
+                continue
+            profile.observe_move(move, scores, expected, weight=3, force=True)
+            profile_store.save(profile)
+            board.push(move)
+            reference = warped.copy()
+            step += 1
+            recorded += 1
+            message = "Move learned. Continue from the current position."
+            continue
+        if action == "finish_training" or key == 27:
+            cv2.destroyWindow(window)
+            return recorded
 
 
 def render_virtual_board(
@@ -710,16 +852,61 @@ def run_pregame_wizard(
     setup: GameSetup,
     board_corners: list[list[float]],
     phone_corners: list[list[float]],
+    profile: BoardProfile,
+    profile_store: BoardProfileStore,
     allow_cancel: bool,
-) -> tuple[GameSetup, list[list[float]], list[list[float]]] | None:
+) -> tuple[
+    GameSetup,
+    list[list[float]],
+    list[list[float]],
+    BoardProfile,
+] | None:
     """Run the clickable game-settings step after camera calibration."""
     window = "Chess Camera - Step 2: Game Settings"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 1100, 820)
+    cv2.resizeWindow(window, 1100, 920)
     current_buttons: list[Button] = []
     click_queue: list[str] = []
     focused_field: str | None = None
     message = ""
+    setup = replace(
+        setup,
+        profile_name=profile.name,
+        profile_samples=profile.sample_count,
+        learning_enabled=profile.learning_enabled,
+    )
+
+    def persist_profile() -> None:
+        profile.board_corners = board_corners
+        profile.phone_corners = phone_corners
+        profile.white_camera_edge = setup.white_camera_edge
+        profile.bottom_clock_is_white = setup.bottom_clock_is_white
+        profile.learning_enabled = setup.learning_enabled
+        profile_store.save(profile)
+        save_config(
+            board_corners,
+            phone_corners,
+            setup.bottom_clock_is_white,
+            setup.white_camera_edge,
+            profile.name,
+        )
+
+    def select_profile(selected: BoardProfile) -> None:
+        nonlocal profile, setup, board_corners, phone_corners
+        persist_profile()
+        profile = selected
+        if profile.board_corners is not None:
+            board_corners = profile.board_corners
+        if profile.phone_corners is not None:
+            phone_corners = profile.phone_corners
+        setup = replace(
+            setup,
+            profile_name=profile.name,
+            profile_samples=profile.sample_count,
+            learning_enabled=profile.learning_enabled,
+            white_camera_edge=profile.white_camera_edge,
+            bottom_clock_is_white=profile.bottom_clock_is_white,
+        )
 
     def on_mouse(
         event: int, x: int, y: int, _flags: int, _data: object
@@ -751,23 +938,13 @@ def run_pregame_wizard(
         if action == "calibrate_board":
             focused_field = None
             board_corners = calibrate_board(capture)
-            save_config(
-                board_corners,
-                phone_corners,
-                setup.bottom_clock_is_white,
-                setup.white_camera_edge,
-            )
+            persist_profile()
             message = "Board calibration updated."
             continue
         if action == "calibrate_phone":
             focused_field = None
             phone_corners = calibrate_phone(capture)
-            save_config(
-                board_corners,
-                phone_corners,
-                setup.bottom_clock_is_white,
-                setup.white_camera_edge,
-            )
+            persist_profile()
             message = "Phone calibration updated."
             continue
         if action == "verify_grid":
@@ -779,19 +956,43 @@ def run_pregame_wizard(
             )
             message = "64-square grid checked."
             continue
-        if action == "start" or (key in (10, 13) and focused_field is None):
-            save_config(
+        if action == "profile_previous":
+            select_profile(profile_store.cycle(profile.name, -1))
+            message = f"Selected {profile.name}."
+            continue
+        if action == "profile_next":
+            select_profile(profile_store.cycle(profile.name, 1))
+            message = f"Selected {profile.name}."
+            continue
+        if action == "profile_new":
+            select_profile(profile_store.create_from(profile))
+            message = f"Created {profile.name}; recalibrate if the camera changed."
+            continue
+        if action == "profile_train":
+            focused_field = None
+            recorded = run_guided_move_training(
+                capture,
                 board_corners,
-                phone_corners,
-                setup.bottom_clock_is_white,
                 setup.white_camera_edge,
+                profile,
+                profile_store,
             )
+            setup = replace(setup, profile_samples=profile.sample_count)
+            message = (
+                f"Learned {recorded} guided moves. Reset the board before starting."
+            )
+            continue
+        if action == "start" or (key in (10, 13) and focused_field is None):
+            persist_profile()
             cv2.destroyWindow(window)
-            return setup, board_corners, phone_corners
+            return setup, board_corners, phone_corners, profile
 
         if action is not None:
             focused_field = None
             setup = apply_setup_action(setup, action)
+            if action == "learning_toggle":
+                profile.learning_enabled = setup.learning_enabled
+                profile_store.save(profile)
             message = ""
 
         if key == 27:
@@ -1048,27 +1249,55 @@ def main() -> None:
             phone_corners = calibrate_phone(capture)
             bottom_clock_is_white = True
             white_camera_edge = "bottom"
+
+        profile_store = BoardProfileStore(PROFILE_DIRECTORY)
+        profile_store.load()
+        profile = profile_store.get(str(config.get("active_profile", "")))
+        if profile is None:
+            profile = profile_store.ensure_default(
+                board_corners,
+                phone_corners,
+                white_camera_edge,
+                bottom_clock_is_white,
+            )
+        if profile.board_corners is not None and not args.recalibrate:
+            board_corners = profile.board_corners
+        else:
+            profile.board_corners = board_corners
+        if profile.phone_corners is not None and not args.recalibrate:
+            phone_corners = profile.phone_corners
+        else:
+            profile.phone_corners = phone_corners
+        white_camera_edge = profile.white_camera_edge
+        bottom_clock_is_white = profile.bottom_clock_is_white
+        profile_store.save(profile)
         save_config(
             board_corners,
             phone_corners,
             bottom_clock_is_white,
             white_camera_edge,
+            profile.name,
         )
 
         setup = GameSetup(
             bottom_clock_is_white=bottom_clock_is_white,
             white_camera_edge=white_camera_edge,
+            profile_name=profile.name,
+            profile_samples=profile.sample_count,
+            learning_enabled=profile.learning_enabled,
         )
         wizard_result = run_pregame_wizard(
             capture,
             setup,
             board_corners,
             phone_corners,
+            profile,
+            profile_store,
             allow_cancel=False,
         )
         if wizard_result is None:
             return
-        setup, board_corners, phone_corners = wizard_result
+        setup, board_corners, phone_corners, profile = wizard_result
         bottom_clock_is_white = setup.bottom_clock_is_white
 
         board = chess.Board()
@@ -1083,6 +1312,7 @@ def main() -> None:
         pending_index = 0
         pending_frame: np.ndarray | None = None
         pending_event_time: float | None = None
+        pending_scores: dict[chess.Square, float] = {}
         accuracy_frames: list[np.ndarray] = []
         accuracy_last_sample = 0.0
         auto_accept = setup.auto_accept
@@ -1243,6 +1473,7 @@ def main() -> None:
                 pending.clear()
                 pending_frame = None
                 pending_event_time = None
+                pending_scores.clear()
                 accuracy_frames.clear()
                 manual_clock.reset()
                 illegal_warning = False
@@ -1336,6 +1567,7 @@ def main() -> None:
                     else stability_ready
                 )
             scores: dict[int, float] = {}
+            raw_scores: dict[int, float] = {}
             if (
                 reference is not None
                 and not pending
@@ -1374,6 +1606,9 @@ def main() -> None:
                         scores = consensus_result.scores
                 else:
                     scores = square_change_scores(reference, warped)
+                raw_scores = scores.copy()
+                if profile.learning_enabled:
+                    scores = profile.adjusted_scores(scores)
                 strongest_change = max(scores.values(), default=0.0)
 
                 if analysis_deferred:
@@ -1410,10 +1645,23 @@ def main() -> None:
                     )
                 elif strongest_change >= MIN_CHANGE:
                     ranked_moves = (
-                        consensus_result.ranked
-                        if consensus_result is not None
-                        else rank_legal_moves(board, scores)
+                        rank_legal_moves(
+                            board,
+                            scores,
+                            profile.learned_patterns()
+                            if profile.learning_enabled
+                            else None,
+                        )
                     )
+                    if (
+                        consensus_result is not None
+                        and consensus_result.move is not None
+                    ):
+                        ranked_moves.sort(
+                            key=lambda candidate: (
+                                candidate.move != consensus_result.move
+                            )
+                        )
                     best_fit = (
                         legal_move_fit(ranked_moves[0], scores) if ranked_moves else None
                     )
@@ -1428,6 +1676,7 @@ def main() -> None:
                         pending.clear()
                         pending_frame = None
                         pending_event_time = None
+                        pending_scores.clear()
                         status = (
                             "Illegal move detected. Return every changed piece "
                             "to the last legal position. "
@@ -1455,6 +1704,7 @@ def main() -> None:
                             else warped.copy()
                         )
                         pending_event_time = analysis_event_time
+                        pending_scores = raw_scores.copy()
                         confidence = (
                             consensus_result.confidence
                             if consensus_result is not None
@@ -1520,6 +1770,16 @@ def main() -> None:
                                                 board.turn, event_time
                                             )
                                         )
+                                if (
+                                    not bullet_mode
+                                    and confidence >= AUTO_CONFIDENCE
+                                ):
+                                    profile.observe_move(
+                                        candidate,
+                                        pending_scores,
+                                        pending[0].expected_squares,
+                                    )
+                                    profile_store.save(profile)
                                 board.push(candidate)
                                 moves.append(candidate)
                                 outcome_time = (
@@ -1533,6 +1793,7 @@ def main() -> None:
                                 pending.clear()
                                 pending_frame = None
                                 pending_event_time = None
+                                pending_scores.clear()
                                 accuracy_frames.clear()
                                 save_game(
                                     moves,
@@ -1894,6 +2155,8 @@ def main() -> None:
                     setup,
                     board_corners,
                     phone_corners,
+                    profile,
+                    profile_store,
                     allow_cancel=True,
                 )
                 cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
@@ -1903,7 +2166,7 @@ def main() -> None:
                         builtin_clock.start(time.monotonic(), resume_clock_side)
                     status = "Setup cancelled. Current game resumed."
                 else:
-                    setup, board_corners, phone_corners = wizard_result
+                    setup, board_corners, phone_corners, profile = wizard_result
                     bottom_clock_is_white = setup.bottom_clock_is_white
                     auto_accept = setup.auto_accept
                     fast_mode = setup.fast_mode
@@ -1944,6 +2207,7 @@ def main() -> None:
                 pending.clear()
                 pending_frame = None
                 pending_event_time = None
+                pending_scores.clear()
                 accuracy_frames.clear()
                 illegal_warning = False
                 illegal_clock_side = None
@@ -2018,6 +2282,14 @@ def main() -> None:
                             move_clocks.append(
                                 builtin_clock.complete_move(board.turn, event_time)
                             )
+                    selected_pattern = pending[pending_index]
+                    profile.observe_move(
+                        selected_move,
+                        pending_scores,
+                        selected_pattern.expected_squares,
+                        weight=2 if pending_index != 0 else 1,
+                    )
+                    profile_store.save(profile)
                     board.push(selected_move)
                     moves.append(selected_move)
                     outcome_time = (
@@ -2030,6 +2302,7 @@ def main() -> None:
                     pending.clear()
                     pending_frame = None
                     pending_event_time = None
+                    pending_scores.clear()
                     accuracy_frames.clear()
                     save_game(
                         moves,
