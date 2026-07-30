@@ -48,6 +48,7 @@ from game_analysis import (
     GameReview,
     analyze_game,
     find_stockfish,
+    probe_uci_engine,
     save_analysis_report,
 )
 from pregame_ui import (
@@ -219,6 +220,7 @@ def save_config(
     bottom_clock_is_white: bool,
     white_camera_edge: str,
     active_profile: str = "Default board",
+    engine_path: Path | None = None,
 ) -> None:
     CONFIG_PATH.write_text(
         json.dumps(
@@ -228,11 +230,63 @@ def save_config(
                 "bottom_clock_is_white": bottom_clock_is_white,
                 "white_camera_edge": white_camera_edge,
                 "active_profile": active_profile,
+                "engine_path": str(engine_path) if engine_path else None,
             },
             indent=2,
         ),
         encoding="utf-8",
     )
+
+
+def choose_uci_engine_file(
+    current_path: Path | None = None,
+) -> tuple[Path | None, str | None]:
+    """Open the operating system file picker for a UCI engine executable."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        return None, (
+            "The system file picker is unavailable. On Ubuntu, install "
+            "python3-tk and restart the app."
+        )
+
+    root: object | None = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            root.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+        initial_directory = (
+            str(current_path.parent)
+            if current_path is not None and current_path.exists()
+            else str(Path.cwd())
+        )
+        selected = filedialog.askopenfilename(
+            parent=root,
+            title="Choose a trusted UCI chess-engine executable",
+            initialdir=initial_directory,
+            filetypes=[
+                ("Chess engine executable", "*.exe")
+                if sys.platform == "win32"
+                else ("Executable files", "*"),
+                ("All files", "*"),
+            ],
+        )
+    except tk.TclError as error:
+        return None, f"Could not open the system file picker: {error}"
+    finally:
+        if root is not None:
+            try:
+                root.destroy()  # type: ignore[attr-defined]
+            except tk.TclError:
+                pass
+
+    if not selected:
+        return None, None
+    return Path(selected), None
 
 
 def draw_grid(board_image: np.ndarray, highlighted: set[int]) -> np.ndarray:
@@ -1107,12 +1161,14 @@ def run_pregame_wizard(
     phone_corners: list[list[float]],
     profile: BoardProfile,
     profile_store: BoardProfileStore,
+    engine_path: Path | None,
     allow_cancel: bool,
 ) -> tuple[
     GameSetup,
     list[list[float]],
     list[list[float]],
     BoardProfile,
+    Path | None,
 ] | None:
     """Run the clickable game-settings step after camera calibration."""
     window = "Chess Camera - Step 2: Game Settings"
@@ -1127,6 +1183,7 @@ def run_pregame_wizard(
         profile_name=profile.name,
         profile_samples=profile.sample_count,
         learning_enabled=profile.learning_enabled,
+        engine_name=engine_path.name if engine_path else "Auto-detect",
     )
 
     def persist_profile() -> None:
@@ -1142,6 +1199,7 @@ def run_pregame_wizard(
             setup.bottom_clock_is_white,
             setup.white_camera_edge,
             profile.name,
+            engine_path,
         )
 
     def select_profile(selected: BoardProfile) -> None:
@@ -1235,10 +1293,40 @@ def run_pregame_wizard(
                 f"Learned {recorded} guided moves. Reset the board before starting."
             )
             continue
+        if action == "select_engine":
+            focused_field = None
+            selected, picker_error = choose_uci_engine_file(engine_path)
+            if picker_error:
+                show_result_popup("Engine picker unavailable", picker_error)
+                message = "Engine selection was not changed."
+                continue
+            if selected is None:
+                message = "Engine selection cancelled."
+                continue
+            resolved = find_stockfish(str(selected))
+            if resolved is None:
+                show_result_popup(
+                    "Invalid engine executable",
+                    "Choose an executable file. On Ubuntu or macOS, the file "
+                    "must also have execute permission.",
+                )
+                message = "Engine selection was not changed."
+                continue
+            try:
+                engine_name = probe_uci_engine(resolved)
+            except AnalysisUnavailable as error:
+                show_result_popup("Invalid UCI engine", str(error))
+                message = "Engine selection was not changed."
+                continue
+            engine_path = resolved
+            setup = replace(setup, engine_name=engine_name)
+            persist_profile()
+            message = f"Selected analysis engine: {engine_name}."
+            continue
         if action == "start" or (key in (10, 13) and focused_field is None):
             persist_profile()
             cv2.destroyWindow(window)
-            return setup, board_corners, phone_corners, profile
+            return setup, board_corners, phone_corners, profile, engine_path
 
         if action is not None:
             focused_field = None
@@ -1480,13 +1568,14 @@ def main() -> None:
         "--recalibrate", action="store_true", help="Ignore saved board corners"
     )
     parser.add_argument(
+        "--engine",
         "--stockfish",
+        dest="engine_path",
         type=str,
         default=None,
-        help="Full path to a Stockfish executable for post-game review",
+        help="Full path to a UCI chess-engine executable for post-game review",
     )
     args = parser.parse_args()
-    stockfish_path = find_stockfish(args.stockfish)
 
     capture = open_camera(args.camera)
     clock_worker: BackgroundClockReader | None = None
@@ -1509,6 +1598,14 @@ def main() -> None:
             phone_corners = calibrate_phone(capture)
             bottom_clock_is_white = True
             white_camera_edge = "bottom"
+        configured_engine_path = (
+            args.engine_path
+            if args.engine_path is not None
+            else config.get("engine_path")
+        )
+        stockfish_path = find_stockfish(
+            str(configured_engine_path) if configured_engine_path else None
+        )
 
         profile_store = BoardProfileStore(PROFILE_DIRECTORY)
         profile_store.load()
@@ -1537,6 +1634,7 @@ def main() -> None:
             bottom_clock_is_white,
             white_camera_edge,
             profile.name,
+            stockfish_path,
         )
 
         setup = GameSetup(
@@ -1545,6 +1643,7 @@ def main() -> None:
             profile_name=profile.name,
             profile_samples=profile.sample_count,
             learning_enabled=profile.learning_enabled,
+            engine_name=stockfish_path.name if stockfish_path else "Auto-detect",
         )
         wizard_result = run_pregame_wizard(
             capture,
@@ -1553,11 +1652,12 @@ def main() -> None:
             phone_corners,
             profile,
             profile_store,
+            stockfish_path,
             allow_cancel=False,
         )
         if wizard_result is None:
             return
-        setup, board_corners, phone_corners, profile = wizard_result
+        setup, board_corners, phone_corners, profile, stockfish_path = wizard_result
         bottom_clock_is_white = setup.bottom_clock_is_white
 
         board = chess.Board()
@@ -2446,6 +2546,7 @@ def main() -> None:
                     phone_corners,
                     profile,
                     profile_store,
+                    stockfish_path,
                     allow_cancel=True,
                 )
                 cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
@@ -2455,7 +2556,13 @@ def main() -> None:
                         builtin_clock.start(time.monotonic(), resume_clock_side)
                     status = "Setup cancelled. Current game resumed."
                 else:
-                    setup, board_corners, phone_corners, profile = wizard_result
+                    (
+                        setup,
+                        board_corners,
+                        phone_corners,
+                        profile,
+                        stockfish_path,
+                    ) = wizard_result
                     bottom_clock_is_white = setup.bottom_clock_is_white
                     auto_accept = setup.auto_accept
                     fast_mode = setup.fast_mode
