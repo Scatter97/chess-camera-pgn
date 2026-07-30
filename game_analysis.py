@@ -46,6 +46,8 @@ class MoveReview:
     centipawn_loss: int
     evaluation_after: int
     mate_after: int | None
+    evaluation_after_white: int
+    mate_after_white: int | None
     best_move_uci: str | None
     best_move_san: str | None
 
@@ -56,6 +58,8 @@ class GameReview:
     seconds_per_position: float
     white_accuracy: float
     black_accuracy: float
+    white_average_centipawn_loss: float
+    black_average_centipawn_loss: float
     moves: list[MoveReview]
 
     def classification_counts(self, white: bool) -> dict[str, int]:
@@ -236,6 +240,15 @@ def build_game_review(
             before,
             after,
         )
+        white_after = (
+            after
+            if mover == chess.WHITE
+            else PositionEvaluation(
+                -after.centipawns,
+                -after.mate if after.mate is not None else None,
+                after.best_move_uci,
+            )
+        )
         reviews.append(
             MoveReview(
                 ply=index + 1,
@@ -248,6 +261,8 @@ def build_game_review(
                 centipawn_loss=loss,
                 evaluation_after=after.centipawns,
                 mate_after=after.mate,
+                evaluation_after_white=white_after.centipawns,
+                mate_after_white=white_after.mate,
                 best_move_uci=before.best_move_uci,
                 best_move_san=best_move_san,
             )
@@ -256,6 +271,8 @@ def build_game_review(
 
     white_values = [move.accuracy for move in reviews if move.white]
     black_values = [move.accuracy for move in reviews if not move.white]
+    white_losses = [move.centipawn_loss for move in reviews if move.white]
+    black_losses = [move.centipawn_loss for move in reviews if not move.white]
     return GameReview(
         engine_name=engine_name,
         seconds_per_position=seconds_per_position,
@@ -264,6 +281,18 @@ def build_game_review(
         else 0.0,
         black_accuracy=round(sum(black_values) / len(black_values), 1)
         if black_values
+        else 0.0,
+        white_average_centipawn_loss=round(
+            sum(white_losses) / len(white_losses),
+            1,
+        )
+        if white_losses
+        else 0.0,
+        black_average_centipawn_loss=round(
+            sum(black_losses) / len(black_losses),
+            1,
+        )
+        if black_losses
         else 0.0,
         moves=reviews,
     )
