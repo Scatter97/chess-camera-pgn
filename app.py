@@ -29,6 +29,15 @@ from chess_tracker import (
     warp_board,
     write_pgn,
 )
+from pregame_ui import (
+    Button,
+    GameSetup,
+    apply_setup_action,
+    clicked_action,
+    draw_button,
+    render_setup_screen,
+    update_text_field,
+)
 
 
 CONFIG_PATH = Path("camera_config.json")
@@ -42,8 +51,10 @@ MIN_CHANGE = 7.0
 LEGAL_FIT_THRESHOLD = 0.66
 RETURNED_BOARD_THRESHOLD = 5.2
 CLOCK_PREVIEW_INTERVAL = 1.5
-VIRTUAL_VIEW_WIDTH = 460
+VIRTUAL_VIEW_WIDTH = 620
 VIRTUAL_VIEW_HEIGHT = 620
+INFO_PANEL_WIDTH = 480
+CAMERA_PANEL_WIDTH = 300
 
 
 def put_text(
@@ -224,16 +235,16 @@ def render_virtual_board(
     canvas = np.zeros((VIRTUAL_VIEW_HEIGHT, VIRTUAL_VIEW_WIDTH, 3), dtype=np.uint8)
     canvas[:] = (31, 34, 40)
 
-    board_size = 416
+    board_size = 520
     cell = board_size // 8
     left = (VIRTUAL_VIEW_WIDTH - board_size) // 2
-    top = 58
+    top = 40
     light_square = (181, 217, 240)
     dark_square = (99, 136, 181)
     last_move_color = (40, 205, 245)
     check_color = (70, 70, 225)
 
-    put_text(canvas, "Virtual Board", (left, 35), (100, 220, 255), 0.78)
+    put_text(canvas, "Virtual Board", (left, 28), (100, 220, 255), 0.65)
     last_squares = (
         {last_move.from_square, last_move.to_square} if last_move else set()
     )
@@ -286,11 +297,11 @@ def render_virtual_board(
                         (235, 235, 235),
                         (245, 245, 245),
                     )
-                cv2.circle(canvas, center, 20, fill, -1, cv2.LINE_AA)
-                cv2.circle(canvas, center, 20, outline, 2, cv2.LINE_AA)
+                cv2.circle(canvas, center, 25, fill, -1, cv2.LINE_AA)
+                cv2.circle(canvas, center, 25, outline, 2, cv2.LINE_AA)
                 label = piece.symbol().upper()
                 (text_width, text_height), _ = cv2.getTextSize(
-                    label, cv2.FONT_HERSHEY_DUPLEX, 0.72, 2
+                    label, cv2.FONT_HERSHEY_DUPLEX, 0.86, 2
                 )
                 cv2.putText(
                     canvas,
@@ -300,7 +311,7 @@ def render_virtual_board(
                         center[1] + text_height // 2,
                     ),
                     cv2.FONT_HERSHEY_DUPLEX,
-                    0.72,
+                    0.86,
                     text_color,
                     2,
                     cv2.LINE_AA,
@@ -334,22 +345,7 @@ def render_virtual_board(
         state = f"{'White' if board.turn else 'Black'} to move"
         state_color = (120, 255, 150)
 
-    put_text(canvas, state, (left, 520), state_color, 0.62)
-    if last_move is not None:
-        put_text(
-            canvas,
-            f"Last move: {last_move.uci()}",
-            (left, 550),
-            (220, 220, 220),
-            0.55,
-        )
-    put_text(
-        canvas,
-        f"FEN: {board.board_fen()[:34]}...",
-        (left, 584),
-        (170, 170, 170),
-        0.37,
-    )
+    put_text(canvas, state, (left + 230, 610), state_color, 0.56)
     return canvas
 
 
@@ -410,8 +406,12 @@ def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
     return view
 
 
-def save_game(moves: list[chess.Move], clocks: list[float | None]) -> None:
-    write_pgn(moves, OUTPUT_PATH, clocks=clocks)
+def save_game(
+    moves: list[chess.Move],
+    clocks: list[float | None],
+    headers: dict[str, str] | None = None,
+) -> None:
+    write_pgn(moves, OUTPUT_PATH, clocks=clocks, headers=headers)
 
 
 def reading_label(reading: object) -> str:
@@ -528,6 +528,101 @@ def configure_builtin_clock(
             )
 
 
+def run_pregame_wizard(
+    capture: cv2.VideoCapture,
+    setup: GameSetup,
+    board_corners: list[list[float]],
+    phone_corners: list[list[float]],
+    allow_cancel: bool,
+) -> tuple[GameSetup, list[list[float]], list[list[float]]] | None:
+    """Run the clickable game-settings step after camera calibration."""
+    window = "Chess Camera - Step 2: Game Settings"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 1100, 700)
+    current_buttons: list[Button] = []
+    click_queue: list[str] = []
+    focused_field: str | None = None
+    message = ""
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(current_buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+
+    while True:
+        ok, raw = capture.read()
+        preview = raw if ok else None
+        screen, current_buttons = render_setup_screen(
+            setup,
+            focused_field,
+            camera_preview=preview,
+            message=message,
+        )
+        cv2.imshow(window, screen)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+
+        if action in {"focus_white", "focus_black", "focus_event"}:
+            focused_field = action.removeprefix("focus_")
+            continue
+        if action == "calibrate_board":
+            focused_field = None
+            board_corners = calibrate_board(capture)
+            save_config(
+                board_corners,
+                phone_corners,
+                setup.bottom_clock_is_white,
+            )
+            message = "Board calibration updated."
+            continue
+        if action == "calibrate_phone":
+            focused_field = None
+            phone_corners = calibrate_phone(capture)
+            save_config(
+                board_corners,
+                phone_corners,
+                setup.bottom_clock_is_white,
+            )
+            message = "Phone calibration updated."
+            continue
+        if action == "start" or (key in (10, 13) and focused_field is None):
+            save_config(
+                board_corners,
+                phone_corners,
+                setup.bottom_clock_is_white,
+            )
+            cv2.destroyWindow(window)
+            return setup, board_corners, phone_corners
+
+        if action is not None:
+            focused_field = None
+            setup = apply_setup_action(setup, action)
+            message = ""
+
+        if key == 27:
+            if allow_cancel:
+                cv2.destroyWindow(window)
+                return None
+            continue
+        if key == 9:
+            order = ["white", "black", "event"]
+            if focused_field not in order:
+                focused_field = order[0]
+            else:
+                focused_field = order[(order.index(focused_field) + 1) % len(order)]
+        elif focused_field is not None and key != 255:
+            if key in (10, 13):
+                focused_field = None
+            else:
+                setup = update_text_field(setup, focused_field, key)
+
+
 def clock_for_player(
     clocks: BothClocks | None,
     player_is_white: bool,
@@ -553,6 +648,46 @@ def format_moves(moves: list[chess.Move]) -> str:
         black = f" {sans[index + 1]}" if index + 1 < len(sans) else ""
         pairs.append(f"{index // 2 + 1}. {sans[index]}{black}")
     return "  ".join(pairs[-5:]) or "(no moves yet)"
+
+
+def move_history_lines(moves: list[chess.Move], limit: int = 9) -> list[str]:
+    board = chess.Board()
+    sans: list[str] = []
+    for move in moves:
+        sans.append(board.san(move))
+        board.push(move)
+    lines = []
+    for index in range(0, len(sans), 2):
+        white = sans[index]
+        black = sans[index + 1] if index + 1 < len(sans) else ""
+        lines.append(f"{index // 2 + 1:>2}.  {white:<12} {black}")
+    return lines[-limit:]
+
+
+def draw_wrapped_text(
+    image: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    max_characters: int,
+    max_lines: int = 3,
+    color: tuple[int, int, int] = (245, 245, 245),
+    scale: float = 0.52,
+) -> None:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > max_characters:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    for row, line in enumerate(lines[:max_lines]):
+        put_text(image, line, (x, y + row * 24), color, scale)
 
 
 def main() -> None:
@@ -582,6 +717,19 @@ def main() -> None:
             bottom_clock_is_white = True
         save_config(board_corners, phone_corners, bottom_clock_is_white)
 
+        setup = GameSetup(bottom_clock_is_white=bottom_clock_is_white)
+        wizard_result = run_pregame_wizard(
+            capture,
+            setup,
+            board_corners,
+            phone_corners,
+            allow_cancel=False,
+        )
+        if wizard_result is None:
+            return
+        setup, board_corners, phone_corners = wizard_result
+        bottom_clock_is_white = setup.bottom_clock_is_white
+
         board = chess.Board()
         moves: list[chess.Move] = []
         move_clocks: list[float | None] = []
@@ -594,13 +742,14 @@ def main() -> None:
         pending_index = 0
         pending_frame: np.ndarray | None = None
         pending_event_time: float | None = None
-        auto_accept = False
-        bullet_mode = False
-        clock_source = "ocr"
-        builtin_settings = ClockSettings()
+        auto_accept = setup.auto_accept
+        bullet_mode = setup.bullet_mode
+        clock_source = setup.clock_source
+        builtin_settings = setup.clock_settings
         builtin_clock = BuiltInChessClock(builtin_settings)
         illegal_warning = False
-        status = "Place all pieces in the starting position, then press S."
+        status = "Game starting. Make White's first move."
+        start_pending = True
         last_accept_time = 0.0
         last_clock_request = 0.0
         latest_clocks: BothClocks | None = None
@@ -609,6 +758,8 @@ def main() -> None:
         last_active_clock_seen = 0.0
         bullet_capture_due: float | None = None
         clock_worker = BackgroundClockReader()
+        game_buttons: list[Button] = []
+        game_click_queue: list[str] = []
 
         def collect_clock_results() -> None:
             nonlocal latest_clocks, clock_error
@@ -639,9 +790,20 @@ def main() -> None:
                         )
                         clock_updated = True
             if clock_updated:
-                save_game(moves, move_clocks)
+                save_game(moves, move_clocks, setup.pgn_headers())
 
         cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
+
+        def on_game_mouse(
+            event: int, x: int, y: int, _flags: int, _data: object
+        ) -> None:
+            if event != cv2.EVENT_LBUTTONUP:
+                return
+            action = clicked_action(game_buttons, x, y)
+            if action is not None:
+                game_click_queue.append(action)
+
+        cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
 
         while True:
             ok, raw = capture.read()
@@ -649,6 +811,30 @@ def main() -> None:
                 continue
             warped = warp_board(raw, board_corners)
             now = time.monotonic()
+
+            if start_pending:
+                board.reset()
+                moves.clear()
+                move_clocks.clear()
+                move_clock_tokens.clear()
+                reference = warped.copy()
+                previous = warped.copy()
+                pending.clear()
+                pending_frame = None
+                pending_event_time = None
+                illegal_warning = False
+                builtin_clock.reset(builtin_settings)
+                if clock_source == "builtin":
+                    builtin_clock.start(now, white_to_move=True)
+                save_game(moves, move_clocks, setup.pgn_headers())
+                last_accept_time = now
+                stable_since = None
+                status = (
+                    "Game started with the built-in clock."
+                    if clock_source == "builtin"
+                    else "Game started with Lichess OCR."
+                )
+                start_pending = False
 
             collect_clock_results()
             if (
@@ -813,7 +999,9 @@ def main() -> None:
                                 pending.clear()
                                 pending_frame = None
                                 pending_event_time = None
-                                save_game(moves, move_clocks)
+                                save_game(
+                                    moves, move_clocks, setup.pgn_headers()
+                                )
                                 last_accept_time = now
                                 stable_since = None
                                 prefix = "Bullet-recorded" if bullet_mode else "Auto-recorded"
@@ -822,257 +1010,219 @@ def main() -> None:
             selected = pending[pending_index] if pending else None
             highlighted = set(selected.expected_squares) if selected else set()
             board_view = draw_grid(warped, highlighted)
-            board_view = cv2.resize(board_view, (620, 620))
             virtual_view = render_virtual_board(
                 board, moves[-1] if moves else None
             )
 
-            panel = np.zeros((620, 500, 3), dtype=np.uint8)
+            panel = np.zeros((620, INFO_PANEL_WIDTH, 3), dtype=np.uint8)
             panel[:] = (31, 34, 40)
-            put_text(panel, "Physical Chess to PGN", (25, 40), (100, 220, 255), 0.85)
-            put_text(panel, f"Turn: {'White' if board.turn else 'Black'}", (25, 82))
-            put_text(panel, f"Moves: {len(moves)}", (25, 112))
+            put_text(
+                panel,
+                setup.event_name[:36] or "Camera-recorded game",
+                (22, 32),
+                (100, 220, 255),
+                0.68,
+            )
+            put_text(panel, setup.white_name[:28] or "White", (22, 72), scale=0.58)
+            put_text(panel, setup.black_name[:28] or "Black", (250, 72), scale=0.58)
+
+            white_clock_text = "--:--"
+            black_clock_text = "--:--"
+            if clock_source == "builtin":
+                white_clock_text = format_display_clock(
+                    builtin_clock.remaining(True, now)
+                )
+                black_clock_text = format_display_clock(
+                    builtin_clock.remaining(False, now)
+                )
+            elif latest_clocks is not None:
+                white_reading = (
+                    latest_clocks.bottom
+                    if bottom_clock_is_white
+                    else latest_clocks.top
+                )
+                black_reading = (
+                    latest_clocks.top
+                    if bottom_clock_is_white
+                    else latest_clocks.bottom
+                )
+                if white_reading.seconds is not None:
+                    white_clock_text = format_display_clock(white_reading.seconds)
+                if black_reading.seconds is not None:
+                    black_clock_text = format_display_clock(black_reading.seconds)
+
+            active_color = (120, 255, 170)
+            idle_color = (185, 190, 200)
+            put_text(
+                panel,
+                white_clock_text,
+                (22, 130),
+                active_color if board.turn else idle_color,
+                1.45,
+            )
+            put_text(
+                panel,
+                black_clock_text,
+                (250, 130),
+                active_color if not board.turn else idle_color,
+                1.45,
+            )
+
             if bullet_mode:
                 put_text(
                     panel,
-                    "Mode: BULLET - LOWER ACCURACY",
-                    (25, 142),
+                    "BULLET - LOWER ACCURACY",
+                    (22, 172),
                     (0, 165, 255),
-                    0.58,
+                    0.51,
                 )
             else:
                 put_text(
                     panel,
-                    f"Auto accept: {'ON' if auto_accept else 'OFF'}",
-                    (25, 142),
+                    f"NORMAL | {'AUTO' if auto_accept else 'MANUAL'}",
+                    (22, 172),
+                    (175, 185, 200),
+                    0.51,
                 )
-            if clock_source == "builtin":
-                put_text(
-                    panel,
-                    f"White clock: {format_display_clock(builtin_clock.remaining(True, now))}",
-                    (25, 172),
-                    (120, 220, 255),
-                    0.56,
-                )
-                put_text(
-                    panel,
-                    f"Black clock: {format_display_clock(builtin_clock.remaining(False, now))}",
-                    (25, 198),
-                    (120, 220, 255),
-                    0.56,
-                )
-                put_text(
-                    panel,
-                    (
-                        f"Built-in: W +{builtin_settings.white_increment_seconds:g}s "
-                        f"| B +{builtin_settings.black_increment_seconds:g}s"
-                    ),
-                    (25, 224),
-                    (170, 210, 255),
-                    0.47,
-                )
-            else:
-                if latest_clocks is not None:
-                    white_reading = (
-                        latest_clocks.bottom
-                        if bottom_clock_is_white
-                        else latest_clocks.top
-                    )
-                    black_reading = (
-                        latest_clocks.top
-                        if bottom_clock_is_white
-                        else latest_clocks.bottom
-                    )
-                    put_text(
-                        panel,
-                        f"White clock: {reading_label(white_reading)}",
-                        (25, 172),
-                        (120, 220, 255),
-                        0.56,
-                    )
-                    put_text(
-                        panel,
-                        f"Black clock: {reading_label(black_reading)}",
-                        (25, 198),
-                        (120, 220, 255),
-                        0.56,
-                    )
-                else:
-                    put_text(panel, "Clocks: reading phone...", (25, 172), scale=0.56)
-                mapping = "bottom=White" if bottom_clock_is_white else "top=White"
-                put_text(panel, f"OCR clock: {mapping}", (25, 224), scale=0.52)
+            source_label = (
+                "BUILT-IN CLOCK"
+                if clock_source == "builtin"
+                else "LICHESS OCR CLOCK"
+            )
+            put_text(panel, source_label, (260, 172), (120, 220, 255), 0.46)
 
             if selected:
                 put_text(
                     panel,
                     f"Selected: {board.san(selected.move)} [{selected.move.uci()}]",
-                    (25, 263),
+                    (22, 213),
                     (80, 255, 120),
-                    0.72,
+                    0.64,
                 )
                 put_text(
                     panel,
                     f"Choice {pending_index + 1}/{len(pending)}",
-                    (25, 292),
-                    scale=0.58,
+                    (360, 213),
+                    scale=0.45,
+                )
+            else:
+                put_text(
+                    panel,
+                    f"{'White' if board.turn else 'Black'} to move",
+                    (22, 213),
+                    active_color,
+                    0.62,
                 )
 
-            y = 330
-            words = status.split()
-            line = ""
-            for word in words:
-                if len(line) + len(word) > 47:
-                    put_text(panel, line, (25, y), scale=0.56)
-                    y += 27
-                    line = word
-                else:
-                    line = f"{line} {word}".strip()
-            if line:
-                put_text(panel, line, (25, y), scale=0.56)
+            put_text(panel, "Moves", (22, 252), (100, 220, 255), 0.62)
+            history = move_history_lines(moves)
+            if history:
+                for row, line in enumerate(history):
+                    put_text(panel, line, (24, 280 + row * 27), scale=0.52)
+            else:
+                put_text(panel, "No moves recorded yet", (24, 280), (155, 165, 180), 0.5)
 
+            cv2.line(panel, (20, 535), (460, 535), (75, 80, 90), 1)
+            draw_wrapped_text(panel, status, 22, 562, 48, max_lines=2)
             if clock_source == "ocr" and clock_error:
-                put_text(panel, "Clock OCR unavailable", (25, 405), (80, 80, 255), 0.52)
+                put_text(panel, "OCR unavailable", (330, 605), (80, 80, 255), 0.43)
             elif clock_source == "ocr" and clock_worker.busy:
-                put_text(panel, "Clock OCR: background", (25, 405), (120, 220, 255), 0.52)
-            elif clock_source == "builtin":
-                put_text(panel, "Clock source: BUILT-IN", (25, 405), (120, 255, 150), 0.52)
-            put_text(panel, "Controls", (25, 438), (100, 220, 255), 0.68)
-            controls = [
-                "ENTER accept | arrows candidate",
-                "Q/R/B/N promotion | U undo",
-                "A auto | B bullet mode | S new",
-                "T clock source | G clock setup",
-                "C calibrate all | K phone only",
-                "F swap clock sides | ESC quit",
-            ]
-            for row, label in enumerate(controls):
-                put_text(panel, label, (25, 470 + row * 24), scale=0.49)
+                put_text(panel, "OCR reading...", (340, 605), (120, 220, 255), 0.43)
 
-            combined = np.hstack([board_view, virtual_view, panel])
+            camera_panel = np.zeros(
+                (620, CAMERA_PANEL_WIDTH, 3), dtype=np.uint8
+            )
+            camera_panel[:] = (25, 28, 34)
+            camera_preview = cv2.resize(board_view, (300, 300))
+            camera_panel[:300] = camera_preview
+            cv2.rectangle(camera_panel, (0, 0), (299, 299), (115, 125, 142), 2)
+            put_text(
+                camera_panel,
+                "SMALL CAMERA PREVIEW",
+                (38, 24),
+                (255, 255, 255),
+                0.46,
+            )
+
+            combined = np.hstack([virtual_view, panel, camera_panel])
+            button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
+            game_buttons = [
+                Button("accept", "ACCEPT MOVE", button_x, 316, 276, 48, active=bool(pending), enabled=bool(pending)),
+                Button("previous", "Previous", button_x, 376, 132, 42, enabled=bool(pending)),
+                Button("next", "Next", button_x + 144, 376, 132, 42, enabled=bool(pending)),
+                Button("promote_q", "Queen", button_x, 430, 132, 40, enabled=bool(pending)),
+                Button("promote_r", "Rook", button_x + 144, 430, 132, 40, enabled=bool(pending)),
+                Button("promote_b", "Bishop", button_x, 480, 132, 40, enabled=bool(pending)),
+                Button("promote_n", "Knight", button_x + 144, 480, 132, 40, enabled=bool(pending)),
+                Button("undo", "Undo", button_x, 532, 132, 42, enabled=bool(moves)),
+                Button("new_game", "New game", button_x + 144, 532, 132, 42),
+                Button("quit", "Finish & save", button_x, 582, 276, 30),
+            ]
+            for game_button in game_buttons:
+                draw_button(combined, game_button)
             if illegal_warning:
                 combined = draw_illegal_warning(combined)
             cv2.imshow("Chess Camera PGN", combined)
             key = cv2.waitKey(1) & 0xFF
+            click_action = game_click_queue.pop(0) if game_click_queue else None
+            key_for_action = {
+                "accept": 13,
+                "previous": ord(","),
+                "next": ord("."),
+                "promote_q": ord("q"),
+                "promote_r": ord("r"),
+                "promote_b": ord("b"),
+                "promote_n": ord("n"),
+                "undo": ord("u"),
+                "new_game": ord("s"),
+                "quit": 27,
+            }
+            if click_action in key_for_action:
+                key = key_for_action[click_action]
 
             if key in (27, ord("x")):
                 break
-            if key == ord("c"):
-                board_corners = calibrate_board(capture)
-                phone_corners = calibrate_phone(capture)
-                save_config(board_corners, phone_corners, bottom_clock_is_white)
-                reference = None
-                previous = None
-                pending.clear()
-                pending_event_time = None
-                illegal_warning = False
-                status = "Calibration saved. Press S with pieces at the start."
-            elif key == ord("k"):
-                phone_corners = calibrate_phone(capture)
-                save_config(board_corners, phone_corners, bottom_clock_is_white)
-                latest_clocks = None
-                last_clock_request = 0.0
-                status = "Phone calibration saved."
-            elif key == ord("f"):
+            if key in (
+                ord("s"),
+                ord("a"),
+                ord("b"),
+                ord("c"),
+                ord("f"),
+                ord("g"),
+                ord("k"),
+                ord("t"),
+            ) and not (pending and key == ord("b")):
                 if clock_source == "builtin":
-                    status = "F only changes the Lichess OCR clock mapping."
+                    builtin_clock.pause(now)
+                wizard_result = run_pregame_wizard(
+                    capture,
+                    setup,
+                    board_corners,
+                    phone_corners,
+                    allow_cancel=True,
+                )
+                cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
+                cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
+                if wizard_result is None:
+                    if clock_source == "builtin":
+                        builtin_clock.start(time.monotonic(), board.turn)
+                    status = "Setup cancelled. Current game resumed."
                 else:
-                    bottom_clock_is_white = not bottom_clock_is_white
-                    save_config(board_corners, phone_corners, bottom_clock_is_white)
-                    status = (
-                        "Clock sides swapped. "
-                        + (
-                            "Bottom is White."
-                            if bottom_clock_is_white
-                            else "Top is White."
-                        )
-                    )
-            elif key == ord("t"):
-                if moves:
-                    status = "Press S before changing the clock source."
-                elif clock_source == "ocr":
-                    updated = configure_builtin_clock(builtin_settings)
-                    if updated is not None:
-                        builtin_settings = updated
-                        builtin_clock.reset(builtin_settings)
-                        clock_source = "builtin"
-                        reference = None
-                        pending.clear()
-                        pending_event_time = None
-                        active_clock_side = None
-                        bullet_capture_due = None
-                        status = "Built-in clock selected. Press S to start it."
-                    else:
-                        status = "Clock source remains Lichess OCR."
-                else:
-                    clock_source = "ocr"
-                    reference = None
-                    pending.clear()
-                    pending_event_time = None
-                    active_clock_side = None
-                    bullet_capture_due = None
-                    status = "Lichess OCR clock selected. Press S to start."
-            elif key == ord("g"):
-                if moves:
-                    status = "Press S before changing built-in clock settings."
-                else:
-                    updated = configure_builtin_clock(builtin_settings)
-                    if updated is not None:
-                        builtin_settings = updated
-                        builtin_clock.reset(builtin_settings)
-                        clock_source = "builtin"
-                        reference = None
-                        pending.clear()
-                        pending_event_time = None
-                        active_clock_side = None
-                        bullet_capture_due = None
-                        status = "Built-in clock configured. Press S to start it."
-                    else:
-                        status = "Built-in clock setup cancelled."
-            elif key == ord("b") and not pending:
-                if moves:
-                    status = "Press S to start a new game before changing modes."
-                else:
-                    bullet_mode = not bullet_mode
+                    setup, board_corners, phone_corners = wizard_result
+                    bottom_clock_is_white = setup.bottom_clock_is_white
+                    auto_accept = setup.auto_accept
+                    bullet_mode = setup.bullet_mode
+                    clock_source = setup.clock_source
+                    builtin_settings = setup.clock_settings
+                    builtin_clock.reset(builtin_settings)
+                    latest_clocks = None
+                    last_clock_request = 0.0
                     active_clock_side = None
                     last_active_clock_seen = 0.0
                     bullet_capture_due = None
-                    stable_since = None
-                    if bullet_mode:
-                        status = (
-                            "Bullet Mode ON: automatic recording and lower accuracy."
-                        )
-                    else:
-                        status = "Normal accuracy mode restored."
-            elif key == ord("s"):
-                board.reset()
-                moves.clear()
-                move_clocks.clear()
-                move_clock_tokens.clear()
-                reference = warped.copy()
-                pending.clear()
-                pending_frame = None
-                pending_event_time = None
-                illegal_warning = False
-                builtin_clock.reset(builtin_settings)
-                if clock_source == "builtin":
-                    builtin_clock.start(now, white_to_move=True)
-                save_game(moves, move_clocks)
-                last_accept_time = now
-                stable_since = None
-                status = (
-                    "Game started with the built-in clock. Make White's first move."
-                    if clock_source == "builtin"
-                    else "Game started with Lichess OCR. Make White's first move."
-                )
-            elif key == ord("a"):
-                if bullet_mode:
-                    status = "Bullet Mode always uses automatic confirmation."
-                else:
-                    auto_accept = not auto_accept
-                    status = (
-                        f"Automatic confirmation "
-                        f"{'enabled' if auto_accept else 'disabled'}."
-                    )
+                    previous = None
+                    start_pending = True
+                    status = "Starting the configured game..."
             elif key == ord("u") and moves:
                 moves.pop()
                 move_clocks.pop()
@@ -1087,7 +1237,7 @@ def main() -> None:
                 pending_frame = None
                 pending_event_time = None
                 illegal_warning = False
-                save_game(moves, move_clocks)
+                save_game(moves, move_clocks, setup.pgn_headers())
                 last_accept_time = now
                 status = "Last move removed. Board view resynchronized."
             elif pending and key in (81, 2424832, ord(",")):
@@ -1145,7 +1295,7 @@ def main() -> None:
                     pending.clear()
                     pending_frame = None
                     pending_event_time = None
-                    save_game(moves, move_clocks)
+                    save_game(moves, move_clocks, setup.pgn_headers())
                     last_accept_time = now
                     stable_since = None
                     status = f"Recorded {san}. Recent: {format_moves(moves)}"
@@ -1157,7 +1307,12 @@ def main() -> None:
             timestamped = Path("games") / (
                 datetime.now().strftime("game_%Y-%m-%d_%H-%M-%S") + ".pgn"
             )
-            write_pgn(moves, timestamped, clocks=move_clocks)
+            write_pgn(
+                moves,
+                timestamped,
+                clocks=move_clocks,
+                headers=setup.pgn_headers(),
+            )
             print(f"Saved PGN to {OUTPUT_PATH} and {timestamped}")
     finally:
         if clock_worker is not None:
