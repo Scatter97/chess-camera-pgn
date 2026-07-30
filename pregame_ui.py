@@ -138,6 +138,21 @@ def draw_text(
     )
 
 
+def button_text_scale(button: Button) -> float:
+    """Return a readable font scale that keeps a button label inside its box."""
+    scale = 0.53
+    available_width = max(1, button.width - 12)
+    text_width = cv2.getTextSize(
+        button.label,
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        1,
+    )[0][0]
+    if text_width > available_width:
+        scale = max(0.36, scale * available_width / text_width)
+    return scale
+
+
 def draw_button(image: np.ndarray, button: Button) -> None:
     if not button.enabled:
         fill = (52, 55, 61)
@@ -166,12 +181,13 @@ def draw_button(image: np.ndarray, button: Button) -> None:
         border,
         2,
     )
+    text_scale = button_text_scale(button)
     (text_width, text_height), _ = cv2.getTextSize(
-        button.label, cv2.FONT_HERSHEY_SIMPLEX, 0.53, 1
+        button.label, cv2.FONT_HERSHEY_SIMPLEX, text_scale, 1
     )
     text_x = button.x + max(8, (button.width - text_width) // 2)
     text_y = button.y + (button.height + text_height) // 2
-    draw_text(image, button.label, (text_x, text_y), text_color, 0.53)
+    draw_text(image, button.label, (text_x, text_y), text_color, text_scale)
 
 
 def clicked_action(buttons: list[Button], x: int, y: int) -> str | None:
