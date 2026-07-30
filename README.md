@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 24)
+# Physical Chess Camera → Timed PGN (Revision 25)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,21 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 25: customizable pinned time controls
+
+Shared built-in-clock setup now uses the empty area below the time controls for
+one-click presets. The default pinned controls are **1+0**, **3+0**, **3+2**,
+**5+0**, **10+0**, and **15+10**.
+
+Click **Choose pinned presets...** to add or remove presets from the available
+list. Up to six may be pinned at once, and the selection is saved in
+`camera_config.json` for future launches. Clicking a pinned preset applies its
+starting time and increment to both players.
+
+Pinned presets are hidden automatically while **Advanced: separate clocks** is
+enabled, because asymmetric White and Black settings may not match a shared
+preset. They reappear unchanged when the setup returns to one shared clock.
 
 ## Revision 24: simpler setup and midgame clock adjustment
 
