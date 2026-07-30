@@ -1,11 +1,19 @@
 from pathlib import Path
+import time
 
 import chess
 import chess.pgn
 import cv2
+import numpy as np
 
 from app import select_camera_backend
-from clock_reader import format_pgn_clock, parse_clock_text
+from clock_reader import (
+    BackgroundClockReader,
+    BothClocks,
+    ClockReading,
+    format_pgn_clock,
+    parse_clock_text,
+)
 from chess_tracker import (
     legal_move_fit,
     move_changed_squares,
@@ -23,6 +31,32 @@ def test_native_camera_backends() -> None:
     assert select_camera_backend("linux2") == cv2.CAP_V4L2
     assert select_camera_backend("win32") == cv2.CAP_DSHOW
     assert select_camera_backend("darwin") == cv2.CAP_AVFOUNDATION
+
+
+def test_background_clock_reader_returns_tagged_result() -> None:
+    expected = BothClocks(
+        ClockReading("1:00", 60.0, 0.99),
+        ClockReading("0:59", 59.0, 0.98),
+    )
+
+    class FakeReader:
+        def read(self, _frame: np.ndarray, _corners: list[list[float]]) -> BothClocks:
+            return expected
+
+    worker = BackgroundClockReader(reader_factory=FakeReader)
+    frame = np.zeros((20, 20, 3), dtype=np.uint8)
+    assert worker.submit_move(frame, [[0, 0], [19, 0], [19, 19], [0, 19]], "m1")
+
+    deadline = time.monotonic() + 2.0
+    results = []
+    while not results and time.monotonic() < deadline:
+        results = worker.poll()
+        time.sleep(0.01)
+    assert worker.close(timeout=2.0)
+    assert len(results) == 1
+    assert results[0].tag == "m1"
+    assert results[0].clocks == expected
+    assert results[0].error is None
 
 
 def test_normal_move_changes_two_squares() -> None:
