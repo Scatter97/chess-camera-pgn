@@ -41,7 +41,12 @@ from chess_tracker import (
     warp_board,
     write_pgn,
 )
-from game_rules import GameOutcome, automatic_outcome, claimable_draw_reasons
+from game_rules import (
+    GameOutcome,
+    automatic_outcome,
+    claimable_draw_reasons,
+    timeout_outcome,
+)
 from game_analysis import (
     DEFAULT_ANALYSIS_SECONDS,
     AnalysisUnavailable,
@@ -2149,6 +2154,18 @@ def main() -> None:
                 start_pending = False
 
             collect_clock_results()
+            if clock_source == "builtin" and not game_finished:
+                flagged_white = builtin_clock.flagged_player(now)
+                if flagged_white is not None:
+                    finish_game(
+                        timeout_outcome(
+                            flagged_white,
+                            setup.white_name,
+                            setup.black_name,
+                        ),
+                        now,
+                    )
+                    continue
             if (
                 clock_source == "ocr"
                 and
