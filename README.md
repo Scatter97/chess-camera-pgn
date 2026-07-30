@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 16)
+# Physical Chess Camera → Timed PGN (Revision 17)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -26,9 +26,32 @@ The game-settings screen contains clickable choices for:
 - camera-controlled or player-controlled built-in clock switching;
 - board or phone recalibration;
 - optional three-frame Accuracy Boost;
-- a labeled 64-square calibration check.
+- a labeled 64-square calibration check;
+- camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 17: angled pieces and camera orientation
+
+The camera no longer needs to be on White's side. In game settings, use
+**White side** to select where White appears in the camera image:
+**Bottom**, **Top**, **Left**, or **Right**. The app rotates the corrected board
+internally so its chess coordinates and virtual board always remain consistent.
+
+Board calibration now uses the four corners as they appear on the camera:
+image top-left, image top-right, image bottom-right, then image bottom-left.
+The corner labels no longer depend on which player is nearest the camera.
+
+The corrected camera image also keeps a 75-pixel detection margin outside every
+board edge. The first and eighth ranks—and the `a`- and `h`-files when the
+camera is beside the board—use these exterior strips as extra visual evidence.
+This helps recognize tall pieces whose tops appear to lean outside the flat
+64-square grid at an angled camera view.
+
+Keep some visible table around every edge of the board. The extra margin cannot
+recover a piece top if it is already outside the original camera frame. Use
+**Check all 64 squares** after choosing the White-side setting to confirm the
+orientation and board alignment.
 
 ## Revision 16: Accuracy Boost
 
@@ -51,9 +74,10 @@ stability delay on a powerful laptop. They are especially useful with unusual
 pieces, reflections, and the temporary LEGO board used during development.
 
 Click **Check all 64 squares** before starting a game to open a live,
-perspective-corrected board with every square labeled. Confirm that each
-physical square and piece is fully inside the matching box. If the grid does
-not follow the board edges, close the check and click **Recalibrate board**.
+perspective-corrected board with every square labeled. Confirm that the grid
+follows the physical board edges. Tall edge pieces may extend into the new
+outer margin. If the grid does not follow the board, close the check and click
+**Recalibrate board**.
 
 ## Illegal-move recovery
 
@@ -359,18 +383,20 @@ For a different camera, open Command Prompt in the project folder and run:
 1. Put the camera on a rigid stand. Do not hold it.
 2. Aim it about 45° downward. The full board and full lit phone screen must fit
    in the laptop-camera image.
-3. Put White's pieces on the side closest to the camera.
+3. The camera may be on White's side, Black's side, or either side edge.
 4. Place the phone vertically beside the board and open the Lichess clock.
 5. Increase the phone brightness enough to keep the digits sharp, but avoid
    glare or reflections.
-6. In board calibration, click the four outside corners in this exact order:
-   `a8`, `h8`, `h1`, `a1`.
+6. In board calibration, click the corners as they appear in the camera:
+   image top-left, image top-right, image bottom-right, image bottom-left.
 7. In phone calibration, click the four lit-screen corners in this order:
    top-left, top-right, bottom-right, bottom-left as seen by the camera.
 8. Press Enter to save each set of corners.
-9. Check that the White and Black clock readings shown in the app are correct.
-   Press `F` if their sides are reversed.
-10. Put every piece in the normal starting position and press `S`.
+9. In game settings, choose whether White appears at the Bottom, Top, Left, or
+   Right of the camera image, then use **Check all 64 squares**.
+10. Check that the White and Black clock readings shown in the app are correct.
+    Change the OCR sides option if their displays are reversed.
+11. Put every piece in the normal starting position and click **Start Game**.
 
 The saved calibration is reused next time. Press `C` inside the app or launch
 with `--recalibrate` if the camera, board, or phone has moved. Press `K` to
