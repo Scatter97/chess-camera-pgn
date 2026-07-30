@@ -182,11 +182,17 @@ def write_pgn(
     path: Path,
     result: str = "*",
     clocks: list[float | None] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> None:
     game = chess.pgn.Game()
     game.headers["Event"] = "Camera-recorded game"
     game.headers["Site"] = "Local chessboard"
     game.headers["Result"] = result
+    if headers:
+        for name, value in headers.items():
+            cleaned = str(value).strip()
+            if cleaned:
+                game.headers[str(name)] = cleaned
 
     node = game
     board = game.board()
