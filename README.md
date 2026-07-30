@@ -1,9 +1,42 @@
-# Physical Chess Camera → Timed PGN (Revision 8)
+# Physical Chess Camera → Timed PGN (Revision 9)
 
 This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
 player's remaining time as a PGN file. The clock can come from Lichess OCR or
 from a configurable clock built into the app.
+
+## Three-step workflow
+
+Revision 9 changes startup into a guided process:
+
+1. **Calibration:** Click the four board corners, then the four phone-screen
+   corners. Saved calibration is reused on later launches.
+2. **Game settings:** Enter the White player, Black player, and event names.
+   Choose all game options with clickable buttons.
+3. **Play:** Click **Start Game**. The match screen opens with the virtual board,
+   clocks, player names, move list, and controls.
+
+The game-settings screen contains clickable choices for:
+
+- Lichess OCR or the built-in clock;
+- Normal or Bullet detection;
+- manual or automatic move confirmation;
+- which OCR clock display belongs to White;
+- separate starting times and increments for White and Black;
+- board or phone recalibration.
+
+Player and event names are included in the saved PGN headers.
+
+## Match-screen layout
+
+The virtual chessboard is now the largest part of the match screen. A separate
+panel gives the player names, large clocks, current turn, recent moves, and
+status messages. The corrected camera footage is kept as a small 300×300
+diagnostic preview.
+
+The match screen has clickable buttons for accepting or cycling through move
+candidates, choosing a promotion piece, undoing, opening a new game's settings,
+and finishing/saving. Keyboard shortcuts remain available as backups.
 
 It is designed for a camera beside the table, looking down at the board and
 phone at roughly 45°. Four clicked board corners create a square top-down board.
@@ -51,12 +84,9 @@ Press `F` if the displayed White and Black clocks are reversed.
 
 ## Lichess OCR or built-in clock
 
-Revision 8 adds a clock-source toggle. Lichess OCR remains the default. Before
-starting a game, press `T` to switch to the built-in clock; switching from OCR
-opens the clock setup window. Press `T` again to return to OCR.
-
-Press `G` to configure the built-in clock directly. White and Black each have
-their own:
+Revision 8 added a clock-source choice. Lichess OCR remains the default. In
+Revision 9, select the source and configure it on the clickable pre-game screen.
+White and Black each have their own:
 
 - starting minutes and seconds;
 - Fischer increment, from 0 to 60 seconds per move.
@@ -64,16 +94,16 @@ their own:
 The starting times and increments may be different. For example, White can
 start with `3:00 + 2` while Black starts with `5:00 + 0`.
 
-After selecting or configuring the clock, press `S` to reset the position and
-start White's clock. The app charges time until the camera detects that the
+After selecting or configuring the clock, click **Start Game** to reset the
+position and start White's clock. The app charges time until the camera detects that the
 move is complete, then adds that player's increment and starts the opponent's
 clock. The resulting time is written to the same standard `[%clk ...]` PGN tag
 used by OCR.
 
-Clock-source and clock-setting changes are blocked once moves have been
-recorded. Start a new game first so a PGN cannot mix unrelated clock sources.
-Undo restores the clock to the moment before the removed move and resumes the
-correct player.
+Clock source, detection, confirmation, player information, and time controls
+are all pre-game settings. Click **New game** to return to that screen. Undo
+restores the clock to the moment before the removed move and resumes the correct
+player.
 
 ### Non-blocking clock processing
 
@@ -245,7 +275,7 @@ The saved calibration is reused next time. Press `C` inside the app or launch
 with `--recalibrate` if the camera, board, or phone has moved. Press `K` to
 recalibrate only the phone.
 
-## Controls
+## Match controls
 
 | Key | Action |
 | --- | --- |
@@ -253,15 +283,12 @@ recalibrate only the phone.
 | Left / Right | Choose another legal candidate |
 | Q / R / B / N | Select the promotion piece |
 | U | Undo the last recorded move and resynchronize |
-| A | Turn high-confidence automatic acceptance on/off |
-| B | Toggle Bullet Mode before a game |
-| S | Start a new game from the standard position |
-| T | Toggle Lichess OCR / built-in clock before a game |
-| G | Set White/Black built-in times and increments |
-| C | Recalibrate the board and phone |
-| K | Recalibrate only the phone screen |
-| F | Swap which phone half belongs to White |
+| S | Open the pre-game setup for a new game |
+| A / B / C / F / G / K / T | Open pre-game setup (legacy shortcuts) |
 | Esc | Finish and close |
+
+Every action above also has a clickable button or a clickable pre-game control,
+so keyboard shortcuts are optional.
 
 The current game is continually saved to:
 
@@ -301,4 +328,5 @@ python -m venv .venv
 
 The main computer-vision and legal-move logic is in `chess_tracker.py`. Lichess
 clock OCR is in `clock_reader.py`. Built-in clock logic is in
-`builtin_clock.py`. The interface and camera loop are in `app.py`.
+`builtin_clock.py`. Clickable setup components are in `pregame_ui.py`. The
+interface and camera loop are in `app.py`.
