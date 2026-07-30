@@ -233,6 +233,8 @@ def save_config(
     active_profile: str = "Default board",
     engine_path: Path | None = None,
     pinned_time_controls: tuple[str, ...] = DEFAULT_PINNED_TIME_CONTROLS,
+    player_name_usage: dict[str, int] | None = None,
+    event_name_usage: dict[str, int] | None = None,
 ) -> None:
     CONFIG_PATH.write_text(
         json.dumps(
@@ -244,11 +246,116 @@ def save_config(
                 "active_profile": active_profile,
                 "engine_path": str(engine_path) if engine_path else None,
                 "pinned_time_controls": list(pinned_time_controls),
+                "player_name_usage": player_name_usage or {},
+                "event_name_usage": event_name_usage or {},
             },
             indent=2,
         ),
         encoding="utf-8",
     )
+
+
+def normalize_usage_counts(raw: object) -> dict[str, int]:
+    """Load safe, non-empty local suggestion counters from configuration."""
+    if not isinstance(raw, dict):
+        return {}
+    normalized: dict[str, int] = {}
+    for value, count in raw.items():
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        try:
+            numeric_count = int(count)
+        except (TypeError, ValueError):
+            continue
+        if cleaned and numeric_count > 0:
+            normalized[cleaned] = numeric_count
+    return normalized
+
+
+def most_used_values(counts: dict[str, int], limit: int = 3) -> tuple[str, ...]:
+    return tuple(
+        value
+        for value, _count in sorted(
+            counts.items(),
+            key=lambda item: (-item[1], item[0].casefold()),
+        )[: max(0, limit)]
+    )
+
+
+def remember_used_value(counts: dict[str, int], value: str) -> None:
+    cleaned = value.strip()
+    if cleaned:
+        counts[cleaned] = counts.get(cleaned, 0) + 1
+
+
+def apply_setup_suggestion(
+    setup: GameSetup,
+    action: str,
+    player_suggestions: tuple[str, ...],
+    event_suggestions: tuple[str, ...],
+) -> GameSetup:
+    parts = action.split("_")
+    if len(parts) != 3 or parts[0] != "suggest":
+        return setup
+    field = parts[1]
+    suggestions = event_suggestions if field == "event" else player_suggestions
+    try:
+        value = suggestions[int(parts[2])]
+    except (ValueError, IndexError):
+        return setup
+    attribute = {
+        "white": "white_name",
+        "black": "black_name",
+        "event": "event_name",
+    }.get(field)
+    return replace(setup, **{attribute: value}) if attribute else setup
+
+
+def prompt_for_text(title: str, label: str, current: str) -> str | None:
+    """Show a small editable OpenCV text prompt."""
+    window = title
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 680, 260)
+    value = current
+    buttons = [
+        Button("save", "SAVE", 135, 180, 180, 52, active=True),
+        Button("cancel", "Cancel", 365, 180, 180, 52),
+    ]
+    clicks: list[str] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event == cv2.EVENT_LBUTTONUP:
+            action = clicked_action(buttons, x, y)
+            if action:
+                clicks.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        view = np.zeros((260, 680, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        put_text(view, title, (34, 48), (100, 220, 255), 0.82)
+        put_text(view, label, (34, 88), (165, 175, 190), 0.50)
+        cv2.rectangle(view, (34, 102), (646, 153), (46, 50, 58), -1)
+        cv2.rectangle(view, (34, 102), (646, 153), (120, 255, 170), 2)
+        put_text(view, value[-44:] or "Type a name", (48, 136), scale=0.59)
+        for button in buttons:
+            draw_button(view, button)
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = clicks.pop(0) if clicks else None
+        if action == "save" or key in (10, 13):
+            cv2.destroyWindow(window)
+            return value.strip()
+        if action == "cancel" or key == 27:
+            cv2.destroyWindow(window)
+            return None
+        if key in (8, 127):
+            value = value[:-1]
+        elif 32 <= key <= 126 and len(value) < 40:
+            value += chr(key)
 
 
 def choose_uci_engine_file(
@@ -1419,6 +1526,8 @@ def run_pregame_wizard(
     profile_store: BoardProfileStore,
     engine_path: Path | None,
     allow_cancel: bool,
+    player_name_usage: dict[str, int],
+    event_name_usage: dict[str, int],
 ) -> tuple[
     GameSetup,
     list[list[float]],
@@ -1458,6 +1567,8 @@ def run_pregame_wizard(
             profile.name,
             engine_path,
             setup.pinned_time_controls,
+            player_name_usage,
+            event_name_usage,
         )
 
     def select_profile(selected: BoardProfile) -> None:
@@ -1526,6 +1637,8 @@ def run_pregame_wizard(
     cv2.setMouseCallback(window, on_mouse)
 
     while True:
+        player_suggestions = most_used_values(player_name_usage)
+        event_suggestions = most_used_values(event_name_usage)
         ok, raw = capture.read()
         preview = raw if ok else None
         screen, current_buttons = render_setup_screen(
@@ -1533,6 +1646,8 @@ def run_pregame_wizard(
             focused_field,
             camera_preview=preview,
             message=message,
+            player_suggestions=player_suggestions,
+            event_suggestions=event_suggestions,
         )
         cv2.imshow(window, screen)
         key = cv2.waitKey(20) & 0xFF
@@ -1540,6 +1655,15 @@ def run_pregame_wizard(
 
         if action in {"focus_white", "focus_black", "focus_event"}:
             focused_field = action.removeprefix("focus_")
+            continue
+        if action is not None and action.startswith("suggest_"):
+            setup = apply_setup_suggestion(
+                setup,
+                action,
+                player_suggestions,
+                event_suggestions,
+            )
+            focused_field = action.split("_")[1]
             continue
         if action == "calibrate_board":
             focused_field = None
@@ -1573,6 +1697,45 @@ def run_pregame_wizard(
         if action == "profile_new":
             select_profile(profile_store.create_from(profile))
             message = f"Created {profile.name}; recalibrate if the camera changed."
+            continue
+        if action == "profile_rename":
+            focused_field = None
+            renamed = prompt_for_text(
+                "Rename board preset",
+                "New preset name",
+                profile.name,
+            )
+            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(window, on_mouse)
+            if renamed is None:
+                message = "Board preset rename cancelled."
+                continue
+            try:
+                profile_store.rename(profile, renamed)
+            except (ValueError, OSError) as error:
+                show_result_popup("Cannot rename preset", str(error))
+                message = "Board preset name was not changed."
+                continue
+            setup = replace(setup, profile_name=profile.name)
+            persist_profile()
+            message = f"Renamed board preset to {profile.name}."
+            continue
+        if action == "profile_reset_training":
+            focused_field = None
+            confirmed = ask_yes_no(
+                "Reset board training?",
+                f'Clear all learned move data for "{profile.name}"? '
+                "Calibration and orientation will be kept.",
+            )
+            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(window, on_mouse)
+            if confirmed:
+                profile.reset_training()
+                profile_store.save(profile)
+                setup = replace(setup, profile_samples=0)
+                message = "Board training reset; calibration was kept."
+            else:
+                message = "Board training was not changed."
             continue
         if action == "profile_train":
             focused_field = None
@@ -1636,6 +1799,9 @@ def run_pregame_wizard(
                 message = f"Pinned {len(selected_presets)} time controls."
             continue
         if action == "start" or (key in (10, 13) and focused_field is None):
+            remember_used_value(player_name_usage, setup.white_name)
+            remember_used_value(player_name_usage, setup.black_name)
+            remember_used_value(event_name_usage, setup.event_name)
             persist_profile()
             cv2.destroyWindow(window)
             return setup, board_corners, phone_corners, profile, engine_path
@@ -1921,6 +2087,12 @@ def main() -> None:
         pinned_time_controls = normalize_pinned_time_controls(
             config.get("pinned_time_controls", DEFAULT_PINNED_TIME_CONTROLS)
         )
+        player_name_usage = normalize_usage_counts(
+            config.get("player_name_usage", {})
+        )
+        event_name_usage = normalize_usage_counts(
+            config.get("event_name_usage", {})
+        )
 
         profile_store = BoardProfileStore(PROFILE_DIRECTORY)
         profile_store.load()
@@ -1951,6 +2123,8 @@ def main() -> None:
             profile.name,
             stockfish_path,
             pinned_time_controls,
+            player_name_usage,
+            event_name_usage,
         )
 
         setup = GameSetup(
@@ -1971,6 +2145,8 @@ def main() -> None:
             profile_store,
             stockfish_path,
             allow_cancel=False,
+            player_name_usage=player_name_usage,
+            event_name_usage=event_name_usage,
         )
         if wizard_result is None:
             return
@@ -3028,6 +3204,8 @@ def main() -> None:
                     profile_store,
                     stockfish_path,
                     allow_cancel=True,
+                    player_name_usage=player_name_usage,
+                    event_name_usage=event_name_usage,
                 )
                 cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
                 cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
