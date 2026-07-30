@@ -1,6 +1,6 @@
-# Physical Chess Camera → Timed PGN (Revision 19)
+# Physical Chess Camera → Timed PGN (Revision 20)
 
-This Windows/laptop app watches a normal physical chess game and a Lichess
+This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
 player's remaining time as a PGN file. The clock can come from Lichess OCR or
 from a configurable clock built into the app.
@@ -27,9 +27,43 @@ The game-settings screen contains clickable choices for:
 - board or phone recalibration;
 - optional three-frame Accuracy Boost;
 - a labeled 64-square calibration check;
+- selectable board profiles and guided move training;
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 20: board profiles and guided learning
+
+The game-settings screen now has selectable board profiles. Each profile keeps
+its own board calibration, phone calibration, camera orientation, clock-side
+mapping, learned move signatures, and per-square camera-noise measurements.
+Use separate profiles for different physical boards, piece sets, camera
+positions, or lighting arrangements.
+
+Click **New board** to create a profile based on the current calibration. Use
+**Previous** and **Next** to select a saved profile. Recalibrating while a
+profile is selected updates only that profile.
+
+Click **Train moves** to open guided training:
+
+1. Put all pieces in the normal starting position and capture the baseline.
+2. The app requests one specific legal move, such as `e2-e4`.
+3. Make that move, remove your hand, and click **Record this move**.
+4. The app verifies the expected squares, saves the before/after signature,
+   and requests the next move in the training line.
+5. Reset the physical board to its starting position after training.
+
+During ordinary games, manually confirmed moves also improve the selected
+profile. Choosing a different candidate before pressing Enter gives that
+correction extra learning weight. High-confidence automatic moves may train
+the profile, but Bullet-mode automatic detections are excluded to avoid
+learning lower-accuracy guesses. Turn **Learning OFF** to use a profile without
+changing its data.
+
+Training data is stored locally as compact JSON measurements in
+`board_profiles/`. Camera video is not uploaded or saved. A profile's learned
+patterns support the existing legal-move detector; they never permit an
+otherwise illegal chess move.
 
 ## Revision 19: macOS launcher
 
@@ -498,5 +532,5 @@ python -m venv .venv
 The main computer-vision and legal-move logic is in `chess_tracker.py`. Lichess
 clock OCR is in `clock_reader.py`. Built-in clock logic is in
 `builtin_clock.py`. Chess-ending rules are in `game_rules.py`. Clickable setup
-components are in `pregame_ui.py`. The interface and camera loop are in
-`app.py`.
+components are in `pregame_ui.py`. Board-profile persistence and learning are
+in `board_profiles.py`. The interface and camera loop are in `app.py`.
