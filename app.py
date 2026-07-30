@@ -45,8 +45,10 @@ from pregame_ui import (
 CONFIG_PATH = Path("camera_config.json")
 OUTPUT_PATH = Path("games/latest_game.pgn")
 STABLE_SECONDS = 1.15
+FAST_STABLE_SECONDS = 0.35
 BULLET_STABLE_SECONDS = 0.22
 BULLET_SWITCH_SETTLE_SECONDS = 0.12
+FAST_ACCEPT_COOLDOWN = 0.35
 BULLET_ACCEPT_COOLDOWN = 0.18
 AUTO_CONFIDENCE = 0.73
 MIN_CHANGE = 7.0
@@ -894,6 +896,30 @@ def manual_clock_player_for_key(key: int) -> bool | None:
     return None
 
 
+def detection_profile(
+    fast_mode: bool,
+    bullet_mode: bool,
+) -> tuple[str, float, float]:
+    if bullet_mode:
+        return "BULLET", BULLET_STABLE_SECONDS, BULLET_ACCEPT_COOLDOWN
+    if fast_mode:
+        return "FAST", FAST_STABLE_SECONDS, FAST_ACCEPT_COOLDOWN
+    return "NORMAL", STABLE_SECONDS, 1.0
+
+
+def frame_motion_score(
+    previous: np.ndarray,
+    current: np.ndarray,
+    sample_step: int = 3,
+) -> float:
+    """Measure movement on small frames while keeping full frames for move analysis."""
+    previous_small = previous[::sample_step, ::sample_step]
+    current_small = current[::sample_step, ::sample_step]
+    previous_gray = cv2.cvtColor(previous_small, cv2.COLOR_BGR2GRAY)
+    current_gray = cv2.cvtColor(current_small, cv2.COLOR_BGR2GRAY)
+    return float(np.mean(cv2.absdiff(previous_gray, current_gray)))
+
+
 def pause_clock_for_illegal_move(
     clock: BuiltInChessClock,
     manual_clock: ManualClockController,
@@ -969,6 +995,7 @@ def main() -> None:
         pending_frame: np.ndarray | None = None
         pending_event_time: float | None = None
         auto_accept = setup.auto_accept
+        fast_mode = setup.fast_mode
         bullet_mode = setup.bullet_mode
         clock_source = setup.clock_source
         manual_clock_switch = setup.manual_clock_switch
@@ -992,6 +1019,9 @@ def main() -> None:
         game_result = "*"
         game_finished = False
         dismissed_draw_claims: set[str] = set()
+        fps_sample_started = time.monotonic()
+        fps_sample_frames = 0
+        display_fps = 0.0
 
         def collect_clock_results() -> None:
             nonlocal latest_clocks, clock_error
@@ -1101,6 +1131,12 @@ def main() -> None:
                 continue
             warped = warp_board(raw, board_corners)
             now = time.monotonic()
+            fps_sample_frames += 1
+            fps_elapsed = now - fps_sample_started
+            if fps_elapsed >= 0.5:
+                display_fps = fps_sample_frames / fps_elapsed
+                fps_sample_started = now
+                fps_sample_frames = 0
 
             if start_pending:
                 board.reset()
@@ -1157,14 +1193,7 @@ def main() -> None:
                     active_clock_side = detected_side
 
             if previous is not None:
-                motion = float(
-                    np.mean(
-                        cv2.absdiff(
-                            cv2.cvtColor(previous, cv2.COLOR_BGR2GRAY),
-                            cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
-                        )
-                    )
-                )
+                motion = frame_motion_score(previous, warped)
                 if motion < 1.6:
                     stable_since = stable_since or now
                 else:
@@ -1173,12 +1202,22 @@ def main() -> None:
                         status = "Waiting for hands and pieces to stop moving..."
             previous = warped.copy()
 
-            stable_requirement = (
-                BULLET_STABLE_SECONDS if bullet_mode else STABLE_SECONDS
+            (
+                detection_mode_name,
+                stable_requirement,
+                accept_cooldown,
+            ) = detection_profile(
+                fast_mode,
+                bullet_mode,
             )
             stability_ready = (
                 stable_since is not None
                 and now - stable_since >= stable_requirement
+            )
+            stability_progress = (
+                min(1.0, max(0.0, (now - stable_since) / stable_requirement))
+                if stable_since is not None
+                else 0.0
             )
             clock_boundary_ready = (
                 bullet_mode
@@ -1199,10 +1238,6 @@ def main() -> None:
                     if bullet_mode and clock_side_available
                     else stability_ready
                 )
-            accept_cooldown = (
-                BULLET_ACCEPT_COOLDOWN if bullet_mode else 1.0
-            )
-
             scores: dict[int, float] = {}
             if (
                 reference is not None
@@ -1359,7 +1394,15 @@ def main() -> None:
                                 )
                                 last_accept_time = now
                                 stable_since = None
-                                prefix = "Bullet-recorded" if bullet_mode else "Auto-recorded"
+                                prefix = (
+                                    "Bullet-recorded"
+                                    if bullet_mode
+                                    else (
+                                        "Fast-recorded"
+                                        if fast_mode
+                                        else "Auto-recorded"
+                                    )
+                                )
                                 if not game_finished and not position_notice:
                                     status = f"{prefix} {format_moves(moves)}"
 
@@ -1441,9 +1484,10 @@ def main() -> None:
             else:
                 put_text(
                     panel,
-                    f"NORMAL | {'AUTO' if auto_accept else 'MANUAL'}",
+                    f"{detection_mode_name} | "
+                    f"{'AUTO' if auto_accept else 'MANUAL'}",
                     (22, 172),
-                    (175, 185, 200),
+                    (120, 255, 170) if fast_mode else (175, 185, 200),
                     0.51,
                 )
             source_label = (
@@ -1517,6 +1561,23 @@ def main() -> None:
                 (255, 255, 255),
                 0.46,
             )
+            put_text(
+                camera_panel,
+                f"{detection_mode_name} | {display_fps:.1f} FPS",
+                (38, 47),
+                (120, 255, 170) if fast_mode else (120, 220, 255),
+                0.39,
+            )
+            cv2.rectangle(camera_panel, (38, 55), (262, 63), (20, 20, 20), -1)
+            progress_width = int(224 * stability_progress)
+            if progress_width:
+                cv2.rectangle(
+                    camera_panel,
+                    (38, 55),
+                    (38 + progress_width, 63),
+                    (80, 220, 120),
+                    -1,
+                )
 
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
@@ -1696,6 +1757,7 @@ def main() -> None:
                     setup, board_corners, phone_corners = wizard_result
                     bottom_clock_is_white = setup.bottom_clock_is_white
                     auto_accept = setup.auto_accept
+                    fast_mode = setup.fast_mode
                     bullet_mode = setup.bullet_mode
                     clock_source = setup.clock_source
                     manual_clock_switch = setup.manual_clock_switch
