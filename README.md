@@ -1,4 +1,4 @@
-# Physical Chess Camera → Timed PGN (Revision 26)
+# Physical Chess Camera → Timed PGN (Revision 27)
 
 This Windows, Ubuntu, and macOS app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
@@ -31,6 +31,25 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 27: Lichess-style time sliders
+
+The built-in time selector now uses two horizontal sliders stacked vertically,
+similar to Lichess:
+
+1. **Minutes per side**
+2. **Increment in seconds**
+
+Click anywhere on a slider or drag its handle to update the displayed time.
+Shared mode changes both players together. **Advanced: separate clocks** shows
+one stacked slider pair for White and another for Black. Clicking a pinned
+preset also moves the sliders to that preset's values.
+
+Common chess-clock values are evenly spaced along each slider, so short time
+controls such as 1, 3, and 5 minutes are easy to select even though the minute
+slider also supports longer games up to 180 minutes.
+
+The sliders remain visible but disabled in Lichess OCR mode.
 
 ## Revision 26: visible OCR preset state
 
