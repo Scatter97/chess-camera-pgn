@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import time
 
 import chess
@@ -44,6 +45,14 @@ from chess_tracker import (
     write_pgn,
 )
 from game_rules import automatic_outcome, claimable_draw_reason
+from game_analysis import (
+    PositionEvaluation,
+    build_game_review,
+    classify_move,
+    find_stockfish,
+    move_accuracy,
+    save_analysis_report,
+)
 from pregame_ui import (
     GameSetup,
     apply_setup_action,
@@ -517,6 +526,82 @@ def test_profile_learning_can_be_disabled() -> None:
         move_changed_squares(board, move),
     )
     assert profile.sample_count == 0
+
+
+def test_analysis_accuracy_and_classification_thresholds() -> None:
+    assert move_accuracy(0) == 100.0
+    assert move_accuracy(50) > move_accuracy(150) > move_accuracy(300)
+
+    board = chess.Board()
+    move = chess.Move.from_uci("e2e4")
+    best = PositionEvaluation(30, None, "e2e4")
+    after = PositionEvaluation(25, None, None)
+    assert classify_move(board, move, 5, move, best, after) == "Best"
+    assert classify_move(board, move, 40, None, best, after) == "Good"
+    assert classify_move(board, move, 90, None, best, after) == "Inaccuracy"
+    assert classify_move(board, move, 180, None, best, after) == "Mistake"
+    assert classify_move(board, move, 320, None, best, after) == "Blunder"
+
+
+def test_analysis_detects_miss_and_apparent_sacrifice() -> None:
+    board = chess.Board()
+    move = chess.Move.from_uci("d2d3")
+    winning = PositionEvaluation(400, None, "d2d4")
+    lost_chance = PositionEvaluation(-100, None, None)
+    assert (
+        classify_move(
+            board,
+            move,
+            500,
+            chess.Move.from_uci("d2d4"),
+            winning,
+            lost_chance,
+        )
+        == "Miss"
+    )
+
+    sacrifice_board = chess.Board("r3k3/p7/8/8/8/8/8/R3K3 w Q - 0 1")
+    sacrifice = chess.Move.from_uci("a1a7")
+    equal = PositionEvaluation(25, None, "a1a7")
+    assert (
+        classify_move(
+            sacrifice_board,
+            sacrifice,
+            0,
+            sacrifice,
+            equal,
+            equal,
+        )
+        == "Brilliant"
+    )
+
+
+def test_game_review_totals_and_json_export(tmp_path: Path) -> None:
+    moves = [chess.Move.from_uci("e2e4"), chess.Move.from_uci("e7e5")]
+    evaluations = [
+        PositionEvaluation(30, None, "e2e4"),
+        PositionEvaluation(-25, None, "e7e5"),
+        PositionEvaluation(20, None, "g1f3"),
+    ]
+    review = build_game_review(moves, evaluations, "Testfish", 0.1)
+    assert review.white_accuracy > 95
+    assert review.black_accuracy > 80
+    assert review.moves[0].classification == "Best"
+    assert review.moves[1].classification == "Best"
+
+    target = tmp_path / "analysis.json"
+    save_analysis_report(review, target)
+    text = target.read_text(encoding="utf-8")
+    assert '"engine_name": "Testfish"' in text
+    assert '"white_accuracy"' in text
+    assert '"white_counts"' in text
+
+
+def test_stockfish_path_can_be_supplied_explicitly(tmp_path: Path) -> None:
+    executable = tmp_path / ("stockfish.exe" if sys.platform == "win32" else "stockfish")
+    executable.write_text("", encoding="utf-8")
+    executable.chmod(0o755)
+    assert find_stockfish(str(executable)) == executable.resolve()
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
