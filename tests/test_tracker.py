@@ -8,7 +8,9 @@ import numpy as np
 
 from app import (
     manual_clock_player_for_key,
+    pause_clock_for_illegal_move,
     render_virtual_board,
+    resume_clock_after_illegal_move,
     select_camera_backend,
     select_promotion_candidate,
 )
@@ -23,6 +25,7 @@ from clock_reader import (
 )
 from chess_tracker import (
     RankedMove,
+    board_looks_restored,
     legal_move_fit,
     move_changed_squares,
     rank_legal_moves,
@@ -151,6 +154,22 @@ def test_illegal_move_has_low_fit() -> None:
     scores[chess.E5] = 24.0  # e2-e5 is not legal from the starting position
     candidate = rank_legal_moves(board, scores)[0]
     assert legal_move_fit(candidate, scores).score < 0.66
+
+
+def test_restored_board_tolerates_one_noisy_square() -> None:
+    restored = blank_scores()
+    restored[chess.E2] = 9.0
+    restored[chess.E4] = 3.0
+    assert board_looks_restored(restored)
+
+    two_changed_squares = blank_scores()
+    two_changed_squares[chess.E2] = 8.0
+    two_changed_squares[chess.E5] = 8.0
+    assert not board_looks_restored(two_changed_squares)
+
+    one_strongly_changed_square = blank_scores()
+    one_strongly_changed_square[chess.E2] = 18.0
+    assert not board_looks_restored(one_strongly_changed_square)
 
 
 def test_pgn_round_trip(tmp_path: Path) -> None:
@@ -388,3 +407,42 @@ def test_manual_clock_keys_are_split_across_keyboard_sides() -> None:
     assert manual_clock_player_for_key(ord("l")) is chess.BLACK
     assert manual_clock_player_for_key(ord("L")) is chess.BLACK
     assert manual_clock_player_for_key(ord("x")) is None
+
+
+def test_illegal_move_pauses_and_resumes_the_retrying_clock() -> None:
+    clock = BuiltInChessClock(
+        ClockSettings(
+            white_initial_seconds=60,
+            black_initial_seconds=60,
+        )
+    )
+    manual_clock = ManualClockController()
+    clock.start(100.0, white_to_move=True)
+
+    retrying_side = pause_clock_for_illegal_move(clock, manual_clock, 110.0)
+    assert retrying_side is chess.WHITE
+    assert clock.active_white is None
+    assert clock.remaining(True, 120.0) == 50.0
+
+    resume_clock_after_illegal_move(clock, retrying_side, 120.0)
+    assert clock.active_white is chess.WHITE
+    assert clock.remaining(True, 125.0) == 45.0
+
+
+def test_illegal_move_cancels_an_early_manual_clock_press() -> None:
+    clock = BuiltInChessClock(
+        ClockSettings(
+            white_initial_seconds=60,
+            black_initial_seconds=60,
+            white_increment_seconds=2,
+        )
+    )
+    manual_clock = ManualClockController()
+    clock.start(100.0, white_to_move=True)
+    manual_clock.press(clock, True, 110.0)
+
+    retrying_side = pause_clock_for_illegal_move(clock, manual_clock, 111.0)
+    assert retrying_side is chess.WHITE
+    assert manual_clock.pending is None
+    assert clock.active_white is None
+    assert clock.remaining(True, 120.0) == 50.0
