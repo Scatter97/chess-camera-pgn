@@ -58,12 +58,15 @@ from game_analysis import (
     save_analysis_report,
 )
 from pregame_ui import (
+    Button,
     DEFAULT_PINNED_TIME_CONTROLS,
     GameSetup,
+    apply_time_slider_value,
     apply_setup_action,
     clicked_action,
     normalize_pinned_time_controls,
     render_setup_screen,
+    slider_value_from_x,
     toggle_pinned_time_control,
     update_text_field,
 )
@@ -477,6 +480,34 @@ def test_switching_back_to_shared_time_copies_white_settings() -> None:
 
     assert not setup.separate_time_controls
     assert setup.clock_settings == ClockSettings(180, 180, 2, 2)
+
+
+def test_shared_time_sliders_update_both_players() -> None:
+    setup = GameSetup(clock_source="builtin")
+    setup = apply_time_slider_value(setup, "slider_shared_minutes", 12)
+    setup = apply_time_slider_value(setup, "slider_shared_increment", 7)
+
+    assert setup.clock_settings == ClockSettings(720, 720, 7, 7)
+
+
+def test_advanced_time_sliders_update_only_the_selected_player() -> None:
+    setup = GameSetup(clock_source="builtin", separate_time_controls=True)
+    setup = apply_time_slider_value(setup, "slider_white_minutes", 3)
+    setup = apply_time_slider_value(setup, "slider_black_increment", 5)
+
+    assert setup.clock_settings == ClockSettings(180, 300, 0, 5)
+
+
+def test_slider_mouse_position_maps_to_its_full_range() -> None:
+    minute_slider = Button("slider_shared_minutes", "", 600, 180, 460, 28)
+    increment_slider = Button("slider_shared_increment", "", 600, 240, 460, 28)
+
+    assert slider_value_from_x(minute_slider.action, minute_slider, 600) == 1
+    assert slider_value_from_x(minute_slider.action, minute_slider, 1060) == 180
+    assert slider_value_from_x(increment_slider.action, increment_slider, 600) == 0
+    assert slider_value_from_x(increment_slider.action, increment_slider, 1060) == 60
+    assert slider_value_from_x(minute_slider.action, minute_slider, 830) == 20
+    assert slider_value_from_x(increment_slider.action, increment_slider, 830) == 10
 
 
 def test_midgame_clock_adjustments_are_independent_and_clamped() -> None:
