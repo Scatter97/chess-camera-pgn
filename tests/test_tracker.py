@@ -12,6 +12,7 @@ from board_profiles import BoardProfile, BoardProfileStore
 from app import (
     detection_profile,
     frame_motion_score,
+    illegal_warning_button,
     manual_clock_player_for_key,
     pause_clock_for_illegal_move,
     render_grid_verification,
@@ -805,3 +806,12 @@ def test_illegal_move_cancels_an_early_manual_clock_press() -> None:
     assert manual_clock.pending is None
     assert clock.active_white is None
     assert clock.remaining(True, 120.0) == 50.0
+
+
+def test_illegal_warning_has_a_centered_clickable_dismiss_button() -> None:
+    button = illegal_warning_button(1400, 620)
+
+    assert button.action == "dismiss_illegal"
+    assert "ESC / X" in button.label
+    assert button.contains(700, 430)
+    assert button.enabled
