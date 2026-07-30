@@ -22,6 +22,13 @@ from chess_tracker import (
     rank_legal_moves,
     write_pgn,
 )
+from pregame_ui import (
+    GameSetup,
+    apply_setup_action,
+    clicked_action,
+    render_setup_screen,
+    update_text_field,
+)
 
 
 def blank_scores() -> dict[int, float]:
@@ -38,7 +45,7 @@ def test_native_camera_backends() -> None:
 def test_virtual_board_tracks_position_and_last_move() -> None:
     board = chess.Board()
     starting_view = render_virtual_board(board)
-    assert starting_view.shape == (620, 460, 3)
+    assert starting_view.shape == (620, 620, 3)
 
     move = chess.Move.from_uci("e2e4")
     board.push(move)
@@ -172,6 +179,23 @@ def test_pgn_contains_per_move_clocks(tmp_path: Path) -> None:
     assert "[%clk 0:00:58.4]" in text
 
 
+def test_pgn_contains_player_information(tmp_path: Path) -> None:
+    target = tmp_path / "players.pgn"
+    write_pgn(
+        [],
+        target,
+        headers={
+            "Event": "Friday Match",
+            "White": "Alice",
+            "Black": "Bob",
+        },
+    )
+    text = target.read_text(encoding="utf-8")
+    assert '[Event "Friday Match"]' in text
+    assert '[White "Alice"]' in text
+    assert '[Black "Bob"]' in text
+
+
 def test_builtin_clock_supports_asymmetric_time_and_increment() -> None:
     clock = BuiltInChessClock(
         ClockSettings(
@@ -206,3 +230,31 @@ def test_builtin_clock_undo_restores_movers_clock() -> None:
     assert clock.active_white is False
     assert clock.remaining(False, 130.0) == 105.0
     assert clock.remaining(True, 130.0) == 52.0
+
+
+def test_clickable_pregame_settings_update_clock_and_modes() -> None:
+    setup = GameSetup()
+    setup = apply_setup_action(setup, "clock_builtin")
+    setup = apply_setup_action(setup, "white_minus60")
+    setup = apply_setup_action(setup, "black_plus10")
+    setup = apply_setup_action(setup, "black_inc_plus")
+    setup = apply_setup_action(setup, "mode_bullet")
+
+    assert setup.clock_source == "builtin"
+    assert setup.clock_settings.white_initial_seconds == 240
+    assert setup.clock_settings.black_initial_seconds == 310
+    assert setup.clock_settings.black_increment_seconds == 1
+    assert setup.bullet_mode
+    assert setup.auto_accept
+
+
+def test_pregame_text_fields_and_click_targets() -> None:
+    setup = GameSetup(white_name="")
+    for character in "Josh":
+        setup = update_text_field(setup, "white", ord(character))
+    screen, buttons = render_setup_screen(setup, "white")
+
+    assert setup.white_name == "Josh"
+    assert screen.shape == (700, 1100, 3)
+    start = next(button for button in buttons if button.action == "start")
+    assert clicked_action(buttons, start.x + 5, start.y + 5) == "start"
