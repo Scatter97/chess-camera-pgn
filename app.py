@@ -21,6 +21,7 @@ from clock_reader import (
 from chess_tracker import (
     BOARD_PIXELS,
     RankedMove,
+    board_looks_restored,
     confidence_for,
     legal_move_fit,
     move_with_promotion,
@@ -50,7 +51,6 @@ BULLET_ACCEPT_COOLDOWN = 0.18
 AUTO_CONFIDENCE = 0.73
 MIN_CHANGE = 7.0
 LEGAL_FIT_THRESHOLD = 0.66
-RETURNED_BOARD_THRESHOLD = 5.2
 CLOCK_PREVIEW_INTERVAL = 1.5
 VIRTUAL_VIEW_WIDTH = 620
 VIRTUAL_VIEW_HEIGHT = 620
@@ -894,6 +894,28 @@ def manual_clock_player_for_key(key: int) -> bool | None:
     return None
 
 
+def pause_clock_for_illegal_move(
+    clock: BuiltInChessClock,
+    manual_clock: ManualClockController,
+    now: float,
+) -> bool | None:
+    """Pause the built-in clock and return the side that must retry."""
+    if manual_clock.pending is not None:
+        manual_clock.cancel(clock, now)
+    retrying_side = clock.active_white
+    clock.pause(now)
+    return retrying_side
+
+
+def resume_clock_after_illegal_move(
+    clock: BuiltInChessClock,
+    retrying_side: bool | None,
+    now: float,
+) -> None:
+    if retrying_side is not None:
+        clock.start(now, retrying_side)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record a physical chess game as PGN.")
     parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
@@ -954,6 +976,7 @@ def main() -> None:
         builtin_clock = BuiltInChessClock(builtin_settings)
         manual_clock = ManualClockController()
         illegal_warning = False
+        illegal_clock_side: bool | None = None
         status = "Game starting. Make White's first move."
         start_pending = True
         last_accept_time = 0.0
@@ -1091,6 +1114,7 @@ def main() -> None:
                 pending_event_time = None
                 manual_clock.reset()
                 illegal_warning = False
+                illegal_clock_side = None
                 game_result = "*"
                 game_finished = False
                 dismissed_draw_claims.clear()
@@ -1145,7 +1169,7 @@ def main() -> None:
                     stable_since = stable_since or now
                 else:
                     stable_since = None
-                    if not pending:
+                    if not pending and not illegal_warning:
                         status = "Waiting for hands and pieces to stop moving..."
             previous = warped.copy()
 
@@ -1197,23 +1221,47 @@ def main() -> None:
                 scores = square_change_scores(reference, warped)
                 strongest_change = max(scores.values(), default=0.0)
 
-                if illegal_warning and strongest_change < RETURNED_BOARD_THRESHOLD:
-                    illegal_warning = False
-                    stable_since = None
-                    status = "Board restored. You may now play a legal move."
+                if illegal_warning:
+                    if board_looks_restored(scores):
+                        illegal_warning = False
+                        if clock_source == "builtin":
+                            resume_clock_after_illegal_move(
+                                builtin_clock,
+                                illegal_clock_side,
+                                now,
+                            )
+                        illegal_clock_side = None
+                        stable_since = None
+                        status = (
+                            "Board restored. Clock resumed; you may now "
+                            "play a legal move."
+                            if clock_source == "builtin"
+                            else "Board restored. You may now play a legal move."
+                        )
                 elif strongest_change >= MIN_CHANGE:
                     ranked_moves = rank_legal_moves(board, scores)
                     best_fit = (
                         legal_move_fit(ranked_moves[0], scores) if ranked_moves else None
                     )
                     if best_fit is None or best_fit.score < LEGAL_FIT_THRESHOLD:
+                        if clock_source == "builtin":
+                            illegal_clock_side = pause_clock_for_illegal_move(
+                                builtin_clock,
+                                manual_clock,
+                                now,
+                            )
                         illegal_warning = True
                         pending.clear()
                         pending_frame = None
                         pending_event_time = None
                         status = (
                             "Illegal move detected. Return every changed piece "
-                            "to the last legal position."
+                            "to the last legal position. "
+                            + (
+                                "The clock is paused."
+                                if clock_source == "builtin"
+                                else "Pause the Lichess clock on the phone."
+                            )
                         )
                         stable_since = None
                         continue_detection = False
@@ -1532,6 +1580,12 @@ def main() -> None:
                 if game_finished:
                     status = "The game is already finished."
                     continue
+                if illegal_warning:
+                    status = (
+                        "Restore the last legal position before pressing "
+                        "a clock key."
+                    )
+                    continue
                 if manual_clock.pending is not None:
                     status = (
                         "A clock press is already waiting for the camera move. "
@@ -1678,6 +1732,7 @@ def main() -> None:
                 pending_frame = None
                 pending_event_time = None
                 illegal_warning = False
+                illegal_clock_side = None
                 save_game(
                     moves,
                     move_clocks,
