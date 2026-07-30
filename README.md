@@ -1,6 +1,6 @@
-# Physical Chess Camera (Beta v0.18)
+# Physical Chess Camera → Timed PGN (Revision 19)
 
-This Windows/Ubuntu app watches a normal physical chess game and a Lichess
+This Windows/laptop app watches a normal physical chess game and a Lichess
 clock running on a phone through one fixed camera. It saves the moves and each
 player's remaining time as a PGN file. The clock can come from Lichess OCR or
 from a configurable clock built into the app.
@@ -30,6 +30,14 @@ The game-settings screen contains clickable choices for:
 - camera placement on any of the board's four sides.
 
 Player and event names are included in the saved PGN headers.
+
+## Revision 19: macOS launcher
+
+macOS now has a dedicated `run_mac.command` launcher. It selects Python 3.11
+or 3.12, creates the `.venv` environment on the first launch, installs the
+project dependencies, and starts the app. It supports both Intel and Apple
+Silicon Macs through Python's native packages and OpenCV's AVFoundation camera
+backend.
 
 ## Revision 18: larger edge margin
 
@@ -368,6 +376,34 @@ sudo usermod -aG video "$USER"
 
 The graphical interface requires a normal Ubuntu desktop session. It will not
 display from a text-only SSH session without graphical forwarding.
+
+## Fast setup on macOS
+
+1. Install Python 3.11 or 3.12 from
+   <https://www.python.org/downloads/macos/>.
+2. Download and extract the project.
+3. Open Terminal, type `cd ` including the space, drag the extracted
+   `chess-camera-pgn` folder into Terminal, and press Return.
+4. Make the launcher executable once:
+
+```bash
+chmod +x run_mac.command
+```
+
+5. Double-click `run_mac.command`. If macOS blocks the first launch,
+   Control-click it, choose **Open**, and confirm **Open**.
+6. When requested, allow camera access. The setting can later be changed under
+   **System Settings → Privacy & Security → Camera**.
+
+The first launch creates `.venv` and installs the required packages. Later
+launches start directly. To select another camera, run:
+
+```bash
+./run_mac.command --camera 1
+```
+
+If camera permission was denied, enable it for Terminal or Python in macOS
+Settings, close the app, and launch it again.
 
 ## Fast setup on Windows
 
