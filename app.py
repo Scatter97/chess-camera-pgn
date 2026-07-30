@@ -886,6 +886,14 @@ def ask_both_players_for_draw(
     return white_accepts and black_accepts
 
 
+def manual_clock_player_for_key(key: int) -> bool | None:
+    if key in (ord("a"), ord("A")):
+        return chess.WHITE
+    if key in (ord("l"), ord("L")):
+        return chess.BLACK
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Record a physical chess game as PGN.")
     parser.add_argument("--camera", type=int, default=0, help="Camera index (default: 0)")
@@ -1242,7 +1250,8 @@ def main() -> None:
                             if not manual_clock_ready:
                                 status = (
                                     f"Candidate: {board.san(candidate)}. "
-                                    f"Press END {'WHITE' if board.turn else 'BLACK'} TURN."
+                                    f"Press {'A' if board.turn else 'L'} for "
+                                    f"{'White' if board.turn else 'Black'}."
                                 )
                             should_auto_accept = bullet_mode or (
                                 auto_accept and confidence >= AUTO_CONFIDENCE
@@ -1391,7 +1400,7 @@ def main() -> None:
                 )
             source_label = (
                 (
-                    "BUILT-IN | PLAYER BUTTON"
+                    "BUILT-IN | A/L KEYS"
                     if manual_clock_switch
                     else "BUILT-IN | CAMERA SWITCH"
                 )
@@ -1463,20 +1472,20 @@ def main() -> None:
 
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
-            clock_button_enabled = (
-                clock_source == "builtin"
-                and manual_clock_switch
-                and not game_finished
-                and manual_clock.pending is None
-            )
-            if manual_clock.pending is not None:
-                clock_button_label = "CLOCK PRESSED - WAIT"
-            elif board.turn == chess.WHITE:
-                clock_button_label = "END WHITE TURN"
-            else:
-                clock_button_label = "END BLACK TURN"
+            if clock_source == "builtin" and manual_clock_switch:
+                clock_key_label = (
+                    "CLOCK PRESSED - WAITING"
+                    if manual_clock.pending is not None
+                    else "A: WHITE CLOCK | L: BLACK CLOCK"
+                )
+                put_text(
+                    combined,
+                    clock_key_label,
+                    (button_x + 7, 270),
+                    (80, 220, 255),
+                    0.42,
+                )
             game_buttons = [
-                Button("clock_press", clock_button_label, button_x, 250, 276, 40, active=clock_button_enabled, enabled=clock_button_enabled),
                 Button("accept", "ACCEPT MOVE", button_x, 298, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
                 Button("previous", "Previous", button_x, 344, 132, 34, enabled=bool(pending) and not game_finished),
                 Button("next", "Next", button_x + 144, 344, 132, 34, enabled=bool(pending) and not game_finished),
@@ -1512,11 +1521,34 @@ def main() -> None:
             if click_action in key_for_action:
                 key = key_for_action[click_action]
 
-            if click_action == "clock_press" and clock_button_enabled:
-                moving_white = board.turn == chess.WHITE
-                manual_clock.press(builtin_clock, moving_white, now)
+            manual_key_player = manual_clock_player_for_key(key)
+            if manual_key_player is not None:
+                if clock_source != "builtin" or not manual_clock_switch:
+                    status = (
+                        "A/L clock keys are available in built-in "
+                        "Player keys mode."
+                    )
+                    continue
+                if game_finished:
+                    status = "The game is already finished."
+                    continue
+                if manual_clock.pending is not None:
+                    status = (
+                        "A clock press is already waiting for the camera move. "
+                        "Press Undo to cancel it."
+                    )
+                    continue
+                if manual_key_player != board.turn:
+                    expected_key = "A" if board.turn else "L"
+                    expected_player = "White" if board.turn else "Black"
+                    status = (
+                        f"Wrong clock key. {expected_player} must press "
+                        f"{expected_key}."
+                    )
+                    continue
+                manual_clock.press(builtin_clock, manual_key_player, now)
                 status = (
-                    f"{'White' if moving_white else 'Black'} clock stopped. "
+                    f"{'White' if manual_key_player else 'Black'} clock stopped. "
                     "Waiting for the camera move."
                 )
                 if pending and (auto_accept or bullet_mode):
@@ -1583,7 +1615,6 @@ def main() -> None:
                 break
             if key in (
                 ord("s"),
-                ord("a"),
                 ord("b"),
                 ord("c"),
                 ord("f"),
@@ -1684,8 +1715,9 @@ def main() -> None:
                         and not manual_clock.ready_for(board.turn)
                     ):
                         status = (
-                            f"Press END {'WHITE' if board.turn else 'BLACK'} "
-                            "TURN before accepting the move."
+                            f"Press {'A' if board.turn else 'L'} for "
+                            f"{'White' if board.turn else 'Black'} before "
+                            "accepting the move."
                         )
                         continue
                     san = board.san(selected_move)
