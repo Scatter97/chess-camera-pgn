@@ -1168,6 +1168,136 @@ def configure_builtin_clock(
             )
 
 
+def apply_midgame_clock_adjustment(
+    white_seconds: float,
+    black_seconds: float,
+    action: str,
+) -> tuple[float, float]:
+    """Apply one safe quick adjustment to a paused clock pair."""
+    changes = {
+        "white_minus60": (True, -60.0),
+        "white_minus10": (True, -10.0),
+        "white_plus10": (True, 10.0),
+        "white_plus60": (True, 60.0),
+        "black_minus60": (False, -60.0),
+        "black_minus10": (False, -10.0),
+        "black_plus10": (False, 10.0),
+        "black_plus60": (False, 60.0),
+    }
+    change = changes.get(action)
+    if change is None:
+        return white_seconds, black_seconds
+    player_is_white, amount = change
+    if player_is_white:
+        white_seconds = min(36000.0, max(0.0, white_seconds + amount))
+    else:
+        black_seconds = min(36000.0, max(0.0, black_seconds + amount))
+    return white_seconds, black_seconds
+
+
+def adjust_builtin_clock(clock: BuiltInChessClock) -> bool:
+    """Let the user adjust a paused built-in clock and confirm or cancel."""
+    window = "Adjust clocks"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 760, 430)
+    original_white = clock.white_seconds
+    original_black = clock.black_seconds
+    white_seconds = original_white
+    black_seconds = original_black
+    click_queue: list[str] = []
+    buttons: list[Button] = []
+
+    def on_mouse(
+        event: int, x: int, y: int, _flags: int, _data: object
+    ) -> None:
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = clicked_action(buttons, x, y)
+        if action is not None:
+            click_queue.append(action)
+
+    cv2.setMouseCallback(window, on_mouse)
+    while True:
+        view = np.zeros((430, 760, 3), dtype=np.uint8)
+        view[:] = (31, 34, 40)
+        put_text(view, "Adjust Built-in Clocks", (28, 45), (100, 220, 255), 0.84)
+        put_text(
+            view,
+            "Both clocks are paused. Changes apply only after Confirm.",
+            (28, 78),
+            (175, 185, 200),
+            0.50,
+        )
+        buttons = []
+        for player, seconds, y, prefix, color in (
+            ("White", white_seconds, 125, "white", (235, 235, 235)),
+            ("Black", black_seconds, 235, "black", (170, 190, 255)),
+        ):
+            put_text(
+                view,
+                f"{player}: {format_display_clock(seconds)}",
+                (30, y),
+                color,
+                0.72,
+            )
+            for index, (suffix, label) in enumerate(
+                (
+                    ("minus60", "-1m"),
+                    ("minus10", "-10s"),
+                    ("plus10", "+10s"),
+                    ("plus60", "+1m"),
+                )
+            ):
+                button = Button(
+                    f"{prefix}_{suffix}",
+                    label,
+                    250 + index * 118,
+                    y - 34,
+                    105,
+                    40,
+                )
+                buttons.append(button)
+                draw_button(view, button)
+        confirm = Button("confirm", "CONFIRM", 250, 340, 210, 54, active=True)
+        cancel = Button("cancel", "Cancel", 480, 340, 210, 54)
+        buttons.extend((confirm, cancel))
+        draw_button(view, confirm)
+        draw_button(view, cancel)
+        put_text(
+            view,
+            "Enter confirms | Esc cancels",
+            (30, 375),
+            (165, 175, 190),
+            0.48,
+        )
+        cv2.imshow(window, view)
+        key = cv2.waitKey(20) & 0xFF
+        action = click_queue.pop(0) if click_queue else None
+        if action in {
+            "white_minus60",
+            "white_minus10",
+            "white_plus10",
+            "white_plus60",
+            "black_minus60",
+            "black_minus10",
+            "black_plus10",
+            "black_plus60",
+        }:
+            white_seconds, black_seconds = apply_midgame_clock_adjustment(
+                white_seconds,
+                black_seconds,
+                action,
+            )
+            continue
+        if action == "confirm" or key in (10, 13):
+            clock.set_remaining(white_seconds, black_seconds)
+            cv2.destroyWindow(window)
+            return True
+        if action == "cancel" or key == 27:
+            cv2.destroyWindow(window)
+            return False
+
+
 def run_pregame_wizard(
     capture: cv2.VideoCapture,
     setup: GameSetup,
@@ -2369,18 +2499,32 @@ def main() -> None:
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
             if clock_source == "builtin" and manual_clock_switch:
                 clock_key_label = (
-                    "CLOCK PRESSED - WAITING"
+                    "CLOCK KEY WAITING"
                     if manual_clock.pending is not None
-                    else "A: WHITE CLOCK | L: BLACK CLOCK"
+                    else "A=WHITE | L=BLACK"
                 )
                 put_text(
                     combined,
                     clock_key_label,
-                    (button_x + 7, 270),
+                    (button_x + 142, 273),
                     (80, 220, 255),
-                    0.42,
+                    0.34,
                 )
             game_buttons = [
+                Button(
+                    "adjust_clocks",
+                    "Adjust clocks",
+                    button_x,
+                    252,
+                    132,
+                    34,
+                    enabled=(
+                        clock_source == "builtin"
+                        and not game_finished
+                        and manual_clock.pending is None
+                        and not illegal_warning
+                    ),
+                ),
                 Button("accept", "ACCEPT MOVE", button_x, 298, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
                 Button("previous", "Previous", button_x, 344, 132, 34, enabled=bool(pending) and not game_finished),
                 Button("next", "Next", button_x + 144, 344, 132, 34, enabled=bool(pending) and not game_finished),
@@ -2456,6 +2600,21 @@ def main() -> None:
                     if clock_source == "builtin"
                     else
                     "Illegal warning dismissed and camera resynchronized."
+                )
+                continue
+
+            if click_action == "adjust_clocks":
+                resume_side = builtin_clock.active_white
+                builtin_clock.pause(now)
+                changed = adjust_builtin_clock(builtin_clock)
+                if resume_side is not None:
+                    builtin_clock.start(time.monotonic(), resume_side)
+                cv2.namedWindow("Chess Camera PGN", cv2.WINDOW_NORMAL)
+                cv2.setMouseCallback("Chess Camera PGN", on_game_mouse)
+                status = (
+                    "Clock adjustment saved; the correct player's clock resumed."
+                    if changed
+                    else "Clock adjustment cancelled; the game clock resumed."
                 )
                 continue
 
