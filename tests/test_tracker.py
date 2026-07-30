@@ -6,6 +6,7 @@ import chess.pgn
 import cv2
 import numpy as np
 
+from board_profiles import BoardProfile, BoardProfileStore
 from app import (
     detection_profile,
     frame_motion_score,
@@ -447,7 +448,7 @@ def test_pregame_text_fields_and_click_targets() -> None:
     screen, buttons = render_setup_screen(setup, "white")
 
     assert setup.white_name == "Josh"
-    assert screen.shape == (820, 1100, 3)
+    assert screen.shape == (920, 1100, 3)
     start = next(button for button in buttons if button.action == "start")
     manual_clock_option = next(
         button for button in buttons if button.action == "clock_switch_manual"
@@ -460,6 +461,62 @@ def test_pregame_text_fields_and_click_targets() -> None:
     assert clicked_action(buttons, white_left.x + 5, white_left.y + 5) == (
         "white_edge_left"
     )
+    train = next(button for button in buttons if button.action == "profile_train")
+    assert clicked_action(buttons, train.x + 5, train.y + 5) == "profile_train"
+
+
+def test_board_profiles_persist_calibration_and_training(tmp_path: Path) -> None:
+    store = BoardProfileStore(tmp_path / "profiles")
+    profile = store.ensure_default(
+        board_corners=[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]],
+        phone_corners=[[9.0, 10.0]] * 4,
+        white_camera_edge="left",
+        bottom_clock_is_white=False,
+    )
+    board = chess.Board()
+    move = chess.Move.from_uci("e2e4")
+    scores = blank_scores()
+    scores[chess.E2] = 25.0
+    scores[chess.E4] = 23.0
+    scores[chess.A1] = 4.0
+    profile.observe_move(move, scores, move_changed_squares(board, move), weight=3)
+    store.save(profile)
+
+    reloaded_store = BoardProfileStore(tmp_path / "profiles")
+    reloaded = reloaded_store.load()[0]
+    assert reloaded.name == "Default board"
+    assert reloaded.white_camera_edge == "left"
+    assert not reloaded.bottom_clock_is_white
+    assert reloaded.sample_count == 3
+    assert reloaded.move_patterns["e2e4"].mean_scores[chess.E2] == 1.0
+    assert reloaded.noise_mean[chess.A1] == 4.0
+
+
+def test_learned_move_signature_breaks_an_ambiguous_ranking() -> None:
+    board = chess.Board()
+    scores = blank_scores()
+    scores[chess.E2] = 22.0
+    scores[chess.E3] = 18.0
+    scores[chess.E4] = 18.0
+    pattern = [0.0] * 64
+    pattern[chess.E2] = 1.0
+    pattern[chess.E4] = 0.95
+
+    ranked = rank_legal_moves(board, scores, {"e2e4": pattern})
+
+    assert ranked[0].move == chess.Move.from_uci("e2e4")
+
+
+def test_profile_learning_can_be_disabled() -> None:
+    profile = BoardProfile("No learning", learning_enabled=False)
+    board = chess.Board()
+    move = chess.Move.from_uci("e2e4")
+    profile.observe_move(
+        move,
+        {square: 10.0 for square in chess.SQUARES},
+        move_changed_squares(board, move),
+    )
+    assert profile.sample_count == 0
 
 
 def test_promotion_popup_choice_replaces_duplicate_variants() -> None:
