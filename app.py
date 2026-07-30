@@ -90,6 +90,9 @@ VIRTUAL_VIEW_WIDTH = 620
 VIRTUAL_VIEW_HEIGHT = 620
 INFO_PANEL_WIDTH = 480
 CAMERA_PANEL_WIDTH = 300
+CAMERA_PREVIEW_TOP = 38
+CAMERA_PREVIEW_SIZE = 240
+GAME_BUTTON_Y_OFFSET = 30
 ACCURACY_FRAME_COUNT = 3
 ACCURACY_SAMPLE_INTERVAL = 0.06
 
@@ -463,6 +466,49 @@ def render_grid_verification(board_image: np.ndarray) -> np.ndarray:
         0.48,
     )
     return view
+
+
+def render_camera_panel(
+    board_view: np.ndarray,
+    detection_mode_name: str,
+    display_fps: float,
+    stability_progress: float,
+    fast_mode: bool,
+) -> np.ndarray:
+    """Render camera diagnostics above, rather than over, the board image."""
+    panel = np.zeros((620, CAMERA_PANEL_WIDTH, 3), dtype=np.uint8)
+    panel[:] = (25, 28, 34)
+    preview = cv2.resize(
+        board_view,
+        (CAMERA_PREVIEW_SIZE, CAMERA_PREVIEW_SIZE),
+    )
+    preview_bottom = CAMERA_PREVIEW_TOP + CAMERA_PREVIEW_SIZE
+    panel[CAMERA_PREVIEW_TOP:preview_bottom, 30:270] = preview
+    cv2.rectangle(
+        panel,
+        (30, CAMERA_PREVIEW_TOP),
+        (269, preview_bottom - 1),
+        (115, 125, 142),
+        2,
+    )
+    put_text(
+        panel,
+        f"{detection_mode_name} | {display_fps:.1f} FPS",
+        (38, 17),
+        (120, 255, 170) if fast_mode else (120, 220, 255),
+        0.39,
+    )
+    cv2.rectangle(panel, (38, 25), (262, 33), (20, 20, 20), -1)
+    progress_width = int(224 * min(1.0, max(0.0, stability_progress)))
+    if progress_width:
+        cv2.rectangle(
+            panel,
+            (38, 25),
+            (38 + progress_width, 33),
+            (80, 220, 120),
+            -1,
+        )
+    return panel
 
 
 def show_grid_verification(
@@ -2847,46 +2893,23 @@ def main() -> None:
             elif clock_source == "ocr" and clock_worker.busy:
                 put_text(panel, "OCR reading...", (340, 605), (120, 220, 255), 0.43)
 
-            camera_panel = np.zeros(
-                (620, CAMERA_PANEL_WIDTH, 3), dtype=np.uint8
+            camera_panel = render_camera_panel(
+                board_view,
+                detection_mode_name,
+                display_fps,
+                stability_progress,
+                fast_mode,
             )
-            camera_panel[:] = (25, 28, 34)
-            camera_preview = cv2.resize(board_view, (240, 240))
-            camera_panel[:240, 30:270] = camera_preview
-            cv2.rectangle(camera_panel, (30, 0), (269, 239), (115, 125, 142), 2)
-            put_text(
-                camera_panel,
-                "SMALL CAMERA PREVIEW",
-                (38, 24),
-                (255, 255, 255),
-                0.46,
-            )
-            put_text(
-                camera_panel,
-                f"{detection_mode_name} | {display_fps:.1f} FPS",
-                (38, 47),
-                (120, 255, 170) if fast_mode else (120, 220, 255),
-                0.39,
-            )
-            cv2.rectangle(camera_panel, (38, 55), (262, 63), (20, 20, 20), -1)
-            progress_width = int(224 * stability_progress)
-            if progress_width:
-                cv2.rectangle(
-                    camera_panel,
-                    (38, 55),
-                    (38 + progress_width, 63),
-                    (80, 220, 120),
-                    -1,
-                )
 
             combined = np.hstack([virtual_view, panel, camera_panel])
             button_x = VIRTUAL_VIEW_WIDTH + INFO_PANEL_WIDTH + 12
+            button_y = GAME_BUTTON_Y_OFFSET
             game_buttons = [
                 Button(
                     "adjust_clocks",
                     "Adjust clocks",
                     button_x,
-                    252,
+                    252 + button_y,
                     132,
                     34,
                     enabled=(
@@ -2900,7 +2923,7 @@ def main() -> None:
                     "wrong_detection",
                     "Detection wrong",
                     button_x + 144,
-                    252,
+                    252 + button_y,
                     132,
                     34,
                     active=last_auto_move is not None,
@@ -2911,28 +2934,28 @@ def main() -> None:
                         and not auto_correction_pending
                     ),
                 ),
-                Button("accept", "ACCEPT MOVE", button_x, 298, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
-                Button("previous", "Previous", button_x, 344, 132, 34, enabled=bool(pending) and not game_finished),
-                Button("next", "Next", button_x + 144, 344, 132, 34, enabled=bool(pending) and not game_finished),
-                Button("promote_q", "Queen", button_x, 386, 132, 32, enabled=bool(pending) and not game_finished),
-                Button("promote_r", "Rook", button_x + 144, 386, 132, 32, enabled=bool(pending) and not game_finished),
-                Button("promote_b", "Bishop", button_x, 426, 132, 32, enabled=bool(pending) and not game_finished),
-                Button("promote_n", "Knight", button_x + 144, 426, 132, 32, enabled=bool(pending) and not game_finished),
-                Button("undo", "Undo", button_x, 466, 132, 34, enabled=(bool(moves) or manual_clock.pending is not None) and not auto_correction_pending),
-                Button("new_game", "New game", button_x + 144, 466, 132, 34),
-                Button("offer_draw", "Offer draw", button_x, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
-                Button("resign", "Resign", button_x + 144, 508, 132, 34, enabled=not game_finished and manual_clock.pending is None),
+                Button("accept", "ACCEPT MOVE", button_x, 298 + button_y, 276, 38, active=bool(pending) and not game_finished, enabled=bool(pending) and not game_finished),
+                Button("previous", "Previous", button_x, 344 + button_y, 132, 34, enabled=bool(pending) and not game_finished),
+                Button("next", "Next", button_x + 144, 344 + button_y, 132, 34, enabled=bool(pending) and not game_finished),
+                Button("promote_q", "Queen", button_x, 386 + button_y, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_r", "Rook", button_x + 144, 386 + button_y, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_b", "Bishop", button_x, 426 + button_y, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("promote_n", "Knight", button_x + 144, 426 + button_y, 132, 32, enabled=bool(pending) and not game_finished),
+                Button("undo", "Undo", button_x, 466 + button_y, 132, 34, enabled=(bool(moves) or manual_clock.pending is not None) and not auto_correction_pending),
+                Button("new_game", "New game", button_x + 144, 466 + button_y, 132, 34),
+                Button("offer_draw", "Offer draw", button_x, 508 + button_y, 132, 34, enabled=not game_finished and manual_clock.pending is None),
+                Button("resign", "Resign", button_x + 144, 508 + button_y, 132, 34, enabled=not game_finished and manual_clock.pending is None),
                 Button(
                     "review",
                     "Review game",
                     button_x,
-                    552,
+                    552 + button_y,
                     132,
                     34,
                     active=game_finished and bool(moves),
                     enabled=game_finished and bool(moves),
                 ),
-                Button("quit", "Finish & save", button_x + 144, 552, 132, 34),
+                Button("quit", "Finish & save", button_x + 144, 552 + button_y, 132, 34),
             ]
             if illegal_warning:
                 game_buttons.append(
