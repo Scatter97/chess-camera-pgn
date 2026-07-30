@@ -10,7 +10,7 @@ import chess
 import numpy as np
 
 
-PROFILE_VERSION = 1
+PROFILE_VERSION = 2
 DEFAULT_PROFILE_NAME = "Default board"
 GUIDED_TRAINING_LINE = (
     "e2e4",
@@ -61,6 +61,7 @@ class BoardProfile:
     bottom_clock_is_white: bool = True
     learning_enabled: bool = True
     move_patterns: dict[str, MovePattern] = field(default_factory=dict)
+    rejected_patterns: dict[str, MovePattern] = field(default_factory=dict)
     noise_mean: list[float] = field(default_factory=lambda: [0.0] * 64)
     noise_count: list[int] = field(default_factory=lambda: [0] * 64)
 
@@ -72,6 +73,13 @@ class BoardProfile:
         return {
             uci: pattern.mean_scores
             for uci, pattern in self.move_patterns.items()
+            if pattern.count > 0
+        }
+
+    def learned_rejections(self) -> dict[str, list[float]]:
+        return {
+            uci: pattern.mean_scores
+            for uci, pattern in self.rejected_patterns.items()
             if pattern.count > 0
         }
 
@@ -108,6 +116,18 @@ class BoardProfile:
             ) / (count + 1)
             self.noise_count[square] = count + 1
 
+    def observe_rejection(
+        self,
+        move: chess.Move,
+        scores: dict[chess.Square, float],
+        weight: int = 3,
+    ) -> None:
+        """Learn that this visual signature should not select this move."""
+        if not self.learning_enabled:
+            return
+        pattern = self.rejected_patterns.setdefault(move.uci(), MovePattern())
+        pattern.add(scores, weight)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "version": PROFILE_VERSION,
@@ -124,15 +144,24 @@ class BoardProfile:
                 }
                 for uci, pattern in self.move_patterns.items()
             },
+            "rejected_patterns": {
+                uci: {
+                    "count": pattern.count,
+                    "mean_scores": pattern.mean_scores,
+                }
+                for uci, pattern in self.rejected_patterns.items()
+            },
             "noise_mean": self.noise_mean,
             "noise_count": self.noise_count,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> BoardProfile:
-        patterns: dict[str, MovePattern] = {}
-        raw_patterns = data.get("move_patterns", {})
-        if isinstance(raw_patterns, dict):
+        def load_patterns(key: str) -> dict[str, MovePattern]:
+            patterns: dict[str, MovePattern] = {}
+            raw_patterns = data.get(key, {})
+            if not isinstance(raw_patterns, dict):
+                return patterns
             for uci, raw in raw_patterns.items():
                 if not isinstance(uci, str) or not isinstance(raw, dict):
                     continue
@@ -143,6 +172,10 @@ class BoardProfile:
                     count=max(0, int(raw.get("count", 0))),
                     mean_scores=[float(value) for value in values],
                 )
+            return patterns
+
+        patterns = load_patterns("move_patterns")
+        rejected_patterns = load_patterns("rejected_patterns")
         noise_mean = data.get("noise_mean", [0.0] * 64)
         noise_count = data.get("noise_count", [0] * 64)
         if not isinstance(noise_mean, list) or len(noise_mean) != 64:
@@ -160,6 +193,7 @@ class BoardProfile:
             bottom_clock_is_white=bool(data.get("bottom_clock_is_white", True)),
             learning_enabled=bool(data.get("learning_enabled", True)),
             move_patterns=patterns,
+            rejected_patterns=rejected_patterns,
             noise_mean=[float(value) for value in noise_mean],
             noise_count=[max(0, int(value)) for value in noise_count],
         )
