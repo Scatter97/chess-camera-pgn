@@ -41,6 +41,8 @@ MIN_CHANGE = 7.0
 LEGAL_FIT_THRESHOLD = 0.66
 RETURNED_BOARD_THRESHOLD = 5.2
 CLOCK_PREVIEW_INTERVAL = 1.5
+VIRTUAL_VIEW_WIDTH = 460
+VIRTUAL_VIEW_HEIGHT = 620
 
 
 def put_text(
@@ -212,6 +214,142 @@ def draw_grid(board_image: np.ndarray, highlighted: set[int]) -> np.ndarray:
         cv2.line(view, (value, 0), (value, BOARD_PIXELS), (255, 255, 255), 1)
         cv2.line(view, (0, value), (BOARD_PIXELS, value), (255, 255, 255), 1)
     return view
+
+
+def render_virtual_board(
+    board: chess.Board, last_move: chess.Move | None = None
+) -> np.ndarray:
+    """Render the recorded chess position with White at the bottom."""
+    canvas = np.zeros((VIRTUAL_VIEW_HEIGHT, VIRTUAL_VIEW_WIDTH, 3), dtype=np.uint8)
+    canvas[:] = (31, 34, 40)
+
+    board_size = 416
+    cell = board_size // 8
+    left = (VIRTUAL_VIEW_WIDTH - board_size) // 2
+    top = 58
+    light_square = (181, 217, 240)
+    dark_square = (99, 136, 181)
+    last_move_color = (40, 205, 245)
+    check_color = (70, 70, 225)
+
+    put_text(canvas, "Virtual Board", (left, 35), (100, 220, 255), 0.78)
+    last_squares = (
+        {last_move.from_square, last_move.to_square} if last_move else set()
+    )
+    checked_king = board.king(board.turn) if board.is_check() else None
+
+    for rank_from_top in range(8):
+        chess_rank = 7 - rank_from_top
+        for file_index in range(8):
+            square = chess.square(file_index, chess_rank)
+            x0 = left + file_index * cell
+            y0 = top + rank_from_top * cell
+            color = (
+                light_square
+                if (file_index + chess_rank) % 2 == 1
+                else dark_square
+            )
+            cv2.rectangle(canvas, (x0, y0), (x0 + cell, y0 + cell), color, -1)
+
+            if square in last_squares:
+                overlay = canvas.copy()
+                cv2.rectangle(
+                    overlay,
+                    (x0, y0),
+                    (x0 + cell, y0 + cell),
+                    last_move_color,
+                    -1,
+                )
+                canvas = cv2.addWeighted(overlay, 0.48, canvas, 0.52, 0)
+            if square == checked_king:
+                cv2.rectangle(
+                    canvas,
+                    (x0 + 2, y0 + 2),
+                    (x0 + cell - 2, y0 + cell - 2),
+                    check_color,
+                    4,
+                )
+
+            piece = board.piece_at(square)
+            if piece is not None:
+                center = (x0 + cell // 2, y0 + cell // 2)
+                if piece.color == chess.WHITE:
+                    fill, outline, text_color = (
+                        (242, 242, 242),
+                        (35, 35, 35),
+                        (25, 25, 25),
+                    )
+                else:
+                    fill, outline, text_color = (
+                        (38, 41, 47),
+                        (235, 235, 235),
+                        (245, 245, 245),
+                    )
+                cv2.circle(canvas, center, 20, fill, -1, cv2.LINE_AA)
+                cv2.circle(canvas, center, 20, outline, 2, cv2.LINE_AA)
+                label = piece.symbol().upper()
+                (text_width, text_height), _ = cv2.getTextSize(
+                    label, cv2.FONT_HERSHEY_DUPLEX, 0.72, 2
+                )
+                cv2.putText(
+                    canvas,
+                    label,
+                    (
+                        center[0] - text_width // 2,
+                        center[1] + text_height // 2,
+                    ),
+                    cv2.FONT_HERSHEY_DUPLEX,
+                    0.72,
+                    text_color,
+                    2,
+                    cv2.LINE_AA,
+                )
+
+    for file_index, file_name in enumerate("abcdefgh"):
+        put_text(
+            canvas,
+            file_name,
+            (left + file_index * cell + cell // 2 - 4, top + board_size + 18),
+            scale=0.42,
+        )
+    for rank_from_top in range(8):
+        put_text(
+            canvas,
+            str(8 - rank_from_top),
+            (left - 16, top + rank_from_top * cell + cell // 2 + 5),
+            scale=0.40,
+        )
+
+    if board.is_checkmate():
+        state = "CHECKMATE"
+        state_color = (70, 70, 255)
+    elif board.is_stalemate():
+        state = "STALEMATE"
+        state_color = (120, 220, 255)
+    elif board.is_check():
+        state = f"{'White' if board.turn else 'Black'} to move - CHECK"
+        state_color = (70, 70, 255)
+    else:
+        state = f"{'White' if board.turn else 'Black'} to move"
+        state_color = (120, 255, 150)
+
+    put_text(canvas, state, (left, 520), state_color, 0.62)
+    if last_move is not None:
+        put_text(
+            canvas,
+            f"Last move: {last_move.uci()}",
+            (left, 550),
+            (220, 220, 220),
+            0.55,
+        )
+    put_text(
+        canvas,
+        f"FEN: {board.board_fen()[:34]}...",
+        (left, 584),
+        (170, 170, 170),
+        0.37,
+    )
+    return canvas
 
 
 def draw_illegal_warning(image: np.ndarray) -> np.ndarray:
@@ -549,6 +687,9 @@ def main() -> None:
             highlighted = set(selected.expected_squares) if selected else set()
             board_view = draw_grid(warped, highlighted)
             board_view = cv2.resize(board_view, (620, 620))
+            virtual_view = render_virtual_board(
+                board, moves[-1] if moves else None
+            )
 
             panel = np.zeros((620, 500, 3), dtype=np.uint8)
             panel[:] = (31, 34, 40)
@@ -642,7 +783,7 @@ def main() -> None:
             for row, label in enumerate(controls):
                 put_text(panel, label, (25, 470 + row * 27), scale=0.51)
 
-            combined = np.hstack([board_view, panel])
+            combined = np.hstack([board_view, virtual_view, panel])
             if illegal_warning:
                 combined = draw_illegal_warning(combined)
             cv2.imshow("Chess Camera PGN", combined)
