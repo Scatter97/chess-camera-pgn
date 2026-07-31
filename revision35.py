@@ -15,6 +15,7 @@ import pregame_ui
 from pregame_ui import Button
 
 REVISION = 35
+REVISION_NAME = "Rev. 35 (Main Menu Update)"
 GAMES_DIR = Path('games')
 
 
@@ -280,7 +281,7 @@ def install_setup_patches() -> None:
 
 
 def home_screen() -> str:
-    window = f'Chess Camera Revision {REVISION}'
+    window = REVISION_NAME
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 960, 640)
     buttons = [
@@ -297,7 +298,7 @@ def home_screen() -> str:
     while True:
         view = np.zeros((640, 960, 3), dtype=np.uint8); view[:] = (28, 31, 37)
         _put(view, 'Chess Camera', (70, 90), (100, 220, 255), 1.25, 2)
-        _put(view, 'Revision 35', (72, 130), (120, 255, 170), 0.65)
+        _put(view, REVISION_NAME, (72, 130), (120, 255, 170), 0.65)
         _put(view, 'Record physical chess games and review them locally.', (72, 168), (165, 175, 190), 0.54)
         for button in buttons: pregame_ui.draw_button(view, button)
         _put(view, 'More features can be added here later.', (305, 585), (135, 145, 160), 0.45)
