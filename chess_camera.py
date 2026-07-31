@@ -5,6 +5,7 @@ import numpy as np
 
 import app
 import app_navigation as navigation
+import calibration_cleanup
 import calibration_ui
 import camera_advanced
 import chess960_generator
@@ -160,6 +161,7 @@ def install_accuracy_sampling_sync() -> None:
 def main() -> None:
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
+    calibration_cleanup.install(calibration_ui)
     calibration_ui.install(app)
 
     engine_settings_screen = navigation.settings_screen
