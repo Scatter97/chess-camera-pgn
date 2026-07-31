@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import cv2
 import numpy as np
 
@@ -68,6 +70,7 @@ def board_options_menu() -> str | None:
 
 def install_consolidated_setup_ui() -> None:
     """Use one setup renderer instead of stacking multiple overlapping patches."""
+    original_apply = app.apply_setup_action
 
     def render(*args: object, **kwargs: object):
         view, buttons = pregame_ui.render_setup_screen(*args, **kwargs)
@@ -101,6 +104,15 @@ def install_consolidated_setup_ui() -> None:
             tipLength=0.30,
         )
 
+        clear_buttons = [
+            Button("clear_white_name", "CLEAR", 412, 130, 48, 28),
+            Button("clear_black_name", "CLEAR", 412, 204, 48, 28),
+            Button("clear_event_name", "CLEAR", 535, 278, 55, 28),
+        ]
+        buttons.extend(clear_buttons)
+        for button in clear_buttons:
+            pregame_ui.draw_button(view, button)
+
         cv2.rectangle(view, (145, 767), (540, 820), (28, 31, 37), -1)
         options = Button("board_options", "Board options", 155, 772, 375, 42)
         buttons.append(options)
@@ -123,8 +135,21 @@ def install_consolidated_setup_ui() -> None:
             return board_options_menu()
         return action
 
+    def apply_action(
+        setup: pregame_ui.GameSetup,
+        action: str,
+    ) -> pregame_ui.GameSetup:
+        if action == "clear_white_name":
+            return replace(setup, white_name="")
+        if action == "clear_black_name":
+            return replace(setup, black_name="")
+        if action == "clear_event_name":
+            return replace(setup, event_name="")
+        return original_apply(setup, action)
+
     app.render_setup_screen = render
     app.clicked_action = clicked
+    app.apply_setup_action = apply_action
 
 
 def home_screen() -> str:
