@@ -1,16 +1,14 @@
 # Physical Chess Camera → Timed PGN
 
-## Rev. 35 (Main Menu Update)
+## Chess Camera 0.36
 
-Chess Camera records a normal physical chess game from one fixed camera and saves the moves as PGN. It can also record remaining clock time from either Lichess OCR or the built-in chess clock.
+Chess Camera records a physical chess game from one fixed camera and saves the moves as PGN. It can also record remaining clock time from Lichess OCR or the built-in chess clock.
 
-Revision 35 is the main version of the project.
+Version `0.36` adds a built-in opening book while continuing to support user-selected Polyglot books.
 
 ## Main menu
 
-The app opens on a scalable feature grid instead of immediately entering calibration or game setup.
-
-Current feature cards:
+The app opens on a scalable feature grid with:
 
 - **Start OTB Game**
 - **Game History**
@@ -19,8 +17,6 @@ Current feature cards:
 - **Settings**
 - A reserved card for future features
 - **Exit**
-
-The grid can be expanded or rearranged as new tools are added.
 
 ## Chess960 generator
 
@@ -36,27 +32,55 @@ It uses the same virtual-board and piece renderer as live play and Stockfish ana
 
 ## Opening Explorer
 
-Opening Explorer uses the `python-chess` Polyglot opening-book integration through `chess.polyglot`.
+Opening Explorer uses `python-chess` through `chess.polyglot`.
 
-Choose a local Polyglot `.bin` book, then click one of the displayed weighted moves to continue exploring the position. The explorer includes:
+Version `0.36` includes a small built-in opening-book source at:
 
-- The same virtual-board and piece renderer used elsewhere in the app
-- Weighted book moves and percentages
-- Clickable move selection
-- Back Move
-- Reset
+```text
+books/default_openings.tsv
+```
+
+When Opening Explorer is first opened, Chess Camera automatically generates this local Polyglot book:
+
+```text
+books/chess_camera_default.bin
+```
+
+The generated `.bin` file is ignored by Git because it can be recreated from the bundled source.
+
+Opening Explorer supports:
+
+- The included built-in book
+- **Choose Book...** for another Polyglot `.bin` file
+- **Use Built-in** to switch back
+- Automatic fallback if a custom book is moved or deleted
+- Weighted move percentages
+- Clickable moves
+- Back Move and Reset
 - Current FEN
-- A saved opening-book path in `camera_config.json`
+- The same board and piece renderer used elsewhere in the app
 
-You can place a `.bin` file inside `books/` for automatic detection, or choose one from another folder. No opening-book database is bundled with Chess Camera.
+The selected mode and custom-book path are stored locally in `camera_config.json`.
+
+The bundled opening lines were curated from the public-domain/CC0 `lichess-org/chess-openings` dataset. See `books/README.md` for source and rebuilding information.
+
+## Building a larger default book
+
+A build tool is included for generating a larger Polyglot book from a local clone of the full `lichess-org/chess-openings` dataset:
+
+```powershell
+.\.venv\Scripts\python.exe tools\build_default_book.py `
+  vendor\lichess-openings `
+  books\chess_camera_default.bin
+```
+
+The tool reads `a.tsv` through `e.tsv`, converts the PGN lines to UCI moves, and writes a weighted Polyglot book.
 
 ## Starting a recorded game
 
-The first Recorded OTB Game after each app launch requires a fresh board calibration. This prevents an old calibration from being reused after the board or camera has moved.
+The first OTB game after each app launch requires a fresh board calibration. Additional games and rematches in the same session reuse the current calibration unless you manually choose **Recalibrate board**.
 
-Additional games and rematches during the same app session reuse the current calibration. You can still manually select **Recalibrate board** at any time.
-
-After calibration, the game-setup page lets you configure:
+The game-setup page supports:
 
 - White and Black player names
 - Event name
@@ -68,62 +92,31 @@ After calibration, the game-setup page lets you configure:
 - Board profiles and guided move training
 - Accuracy Boost
 
-When a player or event text box is selected, an **X** appears inside that active field to clear it.
-
-Press **Back** or **Esc** on the initial setup page to return to the main menu.
+When a player or event field is active, an **X** appears to clear it. Press **Back** or **Esc** on the initial setup page to return to the main menu.
 
 ## Board profiles
 
-Use **Board options** to open a separate menu containing:
+**Board options** contains:
 
 - **Rename preset**
 - **Reset training**
 - **Close**
 
-The Board Options window can be closed with its Close button, Escape, or the window’s X. Creating a new board profile asks for its name.
+The window closes through its Close button, Escape, or the window X. Creating a new board profile asks for its name.
 
-## Game history
+## Game history and Stockfish review
 
-Game History lists recorded games and can display:
+Game History can display players, result, ending method, move count, time control, date, event, and both accuracies after analysis.
 
-- White and Black players
-- Result
-- How the game ended
-- Number of moves
-- Time control
-- Date
-- Event
-- White and Black accuracy after analysis
-
-The selected game can be:
+A saved game can be:
 
 - Reviewed with Stockfish
-- Copied to the clipboard as PGN
-- Deleted after a confirmation popup
+- Copied as PGN
+- Deleted after confirmation
 
-Deleting a game also removes its matching saved analysis files when available.
+The Stockfish review includes accuracy, average centipawn loss, move classifications, suggested moves, a clickable move list, and a left-side evaluation bar.
 
-## Post-game flow
-
-After a completed game is saved, choose:
-
-- **Rematch** — keeps both player names, the event, and the time control, then returns to game setup so they can still be edited.
-- **Main Menu** — returns to the Revision 35 home screen.
-
-## Stockfish analysis
-
-Open **Settings** from the main menu and choose a trusted UCI-compatible engine executable, such as Stockfish.
-
-The review screen includes:
-
-- White and Black accuracy
-- Average centipawn loss
-- Move classifications
-- Stockfish’s suggested move
-- A clickable and scrollable move list
-- A left-side evaluation bar
-
-Stockfish is not bundled with this repository.
+Stockfish is not bundled. Choose a trusted UCI-compatible engine executable through **Settings**.
 
 ## Launching the app
 
@@ -133,12 +126,6 @@ Double-click:
 
 ```text
 run_windows.bat
-```
-
-Or use:
-
-```text
-run_revision35_windows.bat
 ```
 
 ### Ubuntu
@@ -155,7 +142,27 @@ chmod +x run_mac.command
 ./run_mac.command
 ```
 
-The launchers create a local `.venv` environment and install the required Python packages on the first launch.
+The launchers create a local `.venv`, install required packages on first launch, and start `chess_camera.py`.
+
+The older `run_revision35_*` launchers remain as compatibility shortcuts and start the same current version.
+
+## Versioning
+
+- Major features and substantial updates use `0.xx`, such as `0.36` and `0.37`.
+- Small visual changes and bug fixes use `0.xx.xx`, such as `0.36.1`.
+
+`version.py` is the single source of truth. See `VERSIONING.md` and `CHANGELOG.md`.
+
+## Saved local data
+
+The app stores data locally in files and folders such as:
+
+- `camera_config.json`
+- `board_profiles/`
+- `books/chess_camera_default.bin`
+- `games/`
+
+Camera video is not uploaded or saved by the learning system.
 
 ## Calibration guidance
 
@@ -166,23 +173,4 @@ For board calibration, click the exact four corners of the 8×8 playing grid in 
 3. Image bottom-right
 4. Image bottom-left
 
-Keep visible space around every board edge. The app adds an exterior detection margin automatically to help recognize tall pieces near the first rank, eighth rank, and outside files when the camera is angled.
-
-For phone calibration, click the lit screen edges rather than the phone case.
-
-## Saved local data
-
-The app stores data locally in files and folders such as:
-
-- `camera_config.json`
-- `board_profiles/`
-- `books/`
-- `games/`
-
-Camera video is not uploaded or saved by the learning system.
-
-## Compatibility
-
-Revision 35 keeps the existing camera detection, clock handling, move correction, PGN export, board learning, and Stockfish review features developed in earlier revisions.
-
-Older revision details remain available in the repository’s Git history.
+Keep visible space around every board edge. For phone calibration, click the lit screen edges rather than the phone case.
