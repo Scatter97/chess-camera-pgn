@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.39.7
+
+Piece appearance and sound release.
+
+- Replaced letter-in-circle virtual pieces with an original Staunton-inspired PNG piece pack.
+- Applied the selected piece pack to the live game, illegal correction, manual synchronization, game review, and analysis boards.
+- Added support for custom piece packs placed in `piece_packs/<pack name>/` with twelve transparent PNG files.
+- Added **Board Appearance and Sounds** settings with piece-pack selection and direct access to the custom-pack folders.
+- Added move, capture, check, castling, and promotion sounds.
+- Bundled two locally generated sound packs: **Classic Wood** and **Soft Digital**.
+- Added support for custom WAV sound packs placed in `sound_packs/<pack name>/`.
+- Added sound enable/disable, sound-pack selection, and a test-sound button.
+- Restored yellow move highlights over the calibrated camera preview after a move is recorded.
+- Added a setting to enable or disable camera move highlights.
+
+## 0.39.6
+
+Advanced detection and board synchronization release.
+
+- Added **Advanced Detection** settings.
+- Added an optional confidence-based auto-approval toggle.
+- Added a user-adjustable auto-approval threshold from 50% to 99%.
+- Moves at or above the selected confidence are accepted automatically; lower-confidence moves stay available for manual approval.
+- Added **Edit Virtual Board** during a game.
+- Manual board synchronization pauses the built-in clock and uses the existing live virtual-board layout.
+- Players can drag one or more legal moves, undo edits, reset the editor, cancel, or save the synchronized position.
+- Saved synchronization moves are appended to the PGN, the camera reference is refreshed, and the built-in clock resumes for the correct side.
+- Added automated tests for threshold persistence, manual legal-move synchronization, piece packs, sound packs, and runtime source integration.
+- Added a GitHub Actions workflow for compilation and pytest checks.
+
 ## 0.39
 
 Reliability release.
