@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import chess
 import chess.pgn
@@ -12,6 +14,7 @@ import app
 
 
 GAMES_DIR = Path("games")
+_CLEAN_HIGHGUI_INSTALLED = False
 
 
 @dataclass
@@ -31,6 +34,26 @@ class HistoryGame:
     @property
     def moves(self) -> int:
         return (self.plies + 1) // 2
+
+
+def install_clean_highgui_windows() -> None:
+    """Hide Ubuntu's Qt toolbar/status bar while keeping windows resizable."""
+    global _CLEAN_HIGHGUI_INSTALLED
+
+    if _CLEAN_HIGHGUI_INSTALLED or not sys.platform.startswith("linux"):
+        return
+
+    gui_normal = int(getattr(cv2, "WINDOW_GUI_NORMAL", 0))
+    if gui_normal == 0:
+        return
+
+    original_named_window: Callable[..., None] = cv2.namedWindow
+
+    def named_window(name: str, flags: int = cv2.WINDOW_AUTOSIZE) -> None:
+        original_named_window(name, int(flags) | gui_normal)
+
+    cv2.namedWindow = named_window  # type: ignore[assignment]
+    _CLEAN_HIGHGUI_INSTALLED = True
 
 
 def _put(
