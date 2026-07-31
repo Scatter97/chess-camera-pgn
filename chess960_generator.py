@@ -7,9 +7,9 @@ import cv2
 import numpy as np
 
 import app
+import app_navigation as navigation
 import pregame_ui
-import revision35 as base
-import revision35_update as update
+import ui_support as ui
 from pregame_ui import Button
 
 
@@ -47,8 +47,15 @@ def show_chess960_generator() -> None:
     while True:
         view = np.zeros((760, 1180, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
-        base._put(view, "Chess960 Position Generator", (38, 52), (100, 220, 255), 0.95, 2)
-        base._put(
+        ui._put(
+            view,
+            "Chess960 Position Generator",
+            (38, 52),
+            (100, 220, 255),
+            0.95,
+            2,
+        )
+        ui._put(
             view,
             "Generate one of the 960 legal Chess960 starting positions.",
             (40, 83),
@@ -59,14 +66,21 @@ def show_chess960_generator() -> None:
         board_image = _render_board(board)
         view[120:680, 40:600] = board_image
 
-        base._put(view, f"Position #{position_number}", (650, 155), (120, 255, 170), 0.80, 2)
-        base._put(view, "White back rank", (650, 205), (165, 175, 190), 0.48)
+        ui._put(
+            view,
+            f"Position #{position_number}",
+            (650, 155),
+            (120, 255, 170),
+            0.80,
+            2,
+        )
+        ui._put(view, "White back rank", (650, 205), (165, 175, 190), 0.48)
         back_rank = " ".join(
             board.piece_at(chess.square(file_index, 0)).symbol().upper()
             for file_index in range(8)
         )
-        base._put(view, back_rank, (650, 242), (235, 235, 240), 0.72, 2)
-        base._put(
+        ui._put(view, back_rank, (650, 242), (235, 235, 240), 0.72, 2)
+        ui._put(
             view,
             "The bishops are on opposite colors, and the king is between the rooks.",
             (650, 292),
@@ -75,19 +89,27 @@ def show_chess960_generator() -> None:
         )
 
         fen = board.fen()
-        base._put(view, "FEN", (650, 350), (100, 220, 255), 0.50)
-        base._put(view, fen[:63], (650, 382), (210, 215, 225), 0.40)
+        ui._put(view, "FEN", (650, 350), (100, 220, 255), 0.50)
+        ui._put(view, fen[:63], (650, 382), (210, 215, 225), 0.40)
         if len(fen) > 63:
-            base._put(view, fen[63:126], (650, 410), (210, 215, 225), 0.40)
+            ui._put(view, fen[63:126], (650, 410), (210, 215, 225), 0.40)
 
-        generate = Button("generate", "GENERATE ANOTHER", 650, 480, 440, 58, active=True)
+        generate = Button(
+            "generate",
+            "GENERATE ANOTHER",
+            650,
+            480,
+            440,
+            58,
+            active=True,
+        )
         copy_fen = Button("copy", "COPY FEN", 650, 555, 210, 52)
         back = Button("back", "BACK", 880, 555, 210, 52)
         buttons = [generate, copy_fen, back]
         for button in buttons:
             pregame_ui.draw_button(view, button)
 
-        base._put(
+        ui._put(
             view,
             "Press Space or R to generate another position.",
             (650, 650),
@@ -95,7 +117,7 @@ def show_chess960_generator() -> None:
             0.42,
         )
         if message:
-            base._put(view, message, (650, 690), (120, 220, 255), 0.43)
+            ui._put(view, message, (650, 690), (120, 220, 255), 0.43)
 
         cv2.imshow(WINDOW_NAME, view)
         key = cv2.waitKey(25) & 0xFF
@@ -105,7 +127,7 @@ def show_chess960_generator() -> None:
             position_number, board = _new_position()
             message = ""
         elif action == "copy" or key in (ord("c"), ord("C")):
-            copied = update.copy_text(fen)
+            copied = navigation.copy_text(fen)
             message = "FEN copied to clipboard." if copied else "Could not copy FEN."
         elif action == "back" or key == 27:
             cv2.destroyWindow(WINDOW_NAME)

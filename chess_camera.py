@@ -4,13 +4,13 @@ import cv2
 import numpy as np
 
 import app
+import app_navigation as navigation
 import chess960_generator
+import game_history
+import game_session
 import opening_explorer
 import pregame_ui
-import revision35 as base
-import revision35_final as final
-import revision35_patch2 as patch2
-import revision35_update as update
+import ui_support as ui
 from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
 
@@ -27,7 +27,15 @@ def home_screen() -> str:
         Button("chess960", "CHESS960 GENERATOR", 755, 180, 310, 105),
         Button("opening", "OPENING EXPLORER", 55, 360, 310, 105),
         Button("settings", "SETTINGS", 405, 360, 310, 105),
-        Button("future", "MORE FEATURES SOON", 755, 360, 310, 105, enabled=False),
+        Button(
+            "future",
+            "MORE FEATURES SOON",
+            755,
+            360,
+            310,
+            105,
+            enabled=False,
+        ),
         Button("exit", "EXIT", 430, 635, 260, 56),
     ]
     queue: list[str] = []
@@ -42,9 +50,9 @@ def home_screen() -> str:
     while True:
         view = np.zeros((760, 1120, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
-        base._put(view, "Chess Camera", (55, 78), (100, 220, 255), 1.25, 2)
-        base._put(view, VERSION_LABEL, (57, 120), (120, 255, 170), 0.62)
-        base._put(
+        ui._put(view, "Chess Camera", (55, 78), (100, 220, 255), 1.25, 2)
+        ui._put(view, VERSION_LABEL, (57, 120), (120, 255, 170), 0.62)
+        ui._put(
             view,
             "Record games, review them, and use local chess tools.",
             (57, 155),
@@ -64,9 +72,9 @@ def home_screen() -> str:
             ("Reserved expansion space", 775, 500),
         ]
         for text, x, y in descriptions:
-            base._put(view, text, (x, y), (175, 185, 200), 0.40)
+            ui._put(view, text, (x, y), (175, 185, 200), 0.40)
 
-        base._put(
+        ui._put(
             view,
             "Feature cards can be replaced or expanded in later versions.",
             (320, 725),
@@ -77,7 +85,14 @@ def home_screen() -> str:
         cv2.imshow(window, view)
         key = cv2.waitKey(25) & 0xFF
         action = queue.pop(0) if queue else None
-        if action in {"start", "history", "chess960", "opening", "settings", "exit"}:
+        if action in {
+            "start",
+            "history",
+            "chess960",
+            "opening",
+            "settings",
+            "exit",
+        }:
             cv2.destroyWindow(window)
             return action
         if key == 27:
@@ -91,29 +106,29 @@ def home_screen() -> str:
 
 
 def main() -> None:
-    base.install_setup_patches()
-    update.install_navigation_patches()
-    final.install_consolidated_setup_ui()
-    app.draw_evaluation_bar = patch2.draw_evaluation_bar_left
+    ui.install_profile_creation_prompt()
+    navigation.install_navigation_patches()
+    game_session.install_consolidated_setup_ui()
+    app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
 
     while True:
         action = home_screen()
         if action == "history":
-            patch2.show_game_history()
+            game_history.show_game_history()
         elif action == "chess960":
             chess960_generator.show_chess960_generator()
         elif action == "opening":
             opening_explorer.show_opening_explorer()
         elif action == "settings":
-            update.settings_screen()
+            navigation.settings_screen()
         elif action == "start":
-            saved = final.run_game()
+            saved = game_session.run_game()
             while saved:
-                post_action = update.post_game_screen()
-                if post_action != "rematch" or update.LAST_SETUP is None:
+                post_action = navigation.post_game_screen()
+                if post_action != "rematch" or navigation.LAST_SETUP is None:
                     break
-                update.REMATCH_SETUP = update.LAST_SETUP
-                saved = final.run_game()
+                navigation.REMATCH_SETUP = navigation.LAST_SETUP
+                saved = game_session.run_game()
         else:
             return
 

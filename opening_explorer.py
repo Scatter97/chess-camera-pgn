@@ -8,9 +8,9 @@ import cv2
 import numpy as np
 
 import app
+import app_navigation as navigation
 import pregame_ui
-import revision35 as base
-import revision35_update as update
+import ui_support as ui
 from opening_book_builder import build_polyglot_book_from_tsv
 from pregame_ui import Button
 
@@ -47,22 +47,21 @@ def _ensure_builtin_book() -> tuple[Path | None, str | None]:
 
 
 def _save_book_choice(mode: str, path: Path | None = None) -> None:
-    data = update._config()
+    data = navigation._config()
     data["opening_book_mode"] = mode
     if path is not None:
         data["opening_book_path"] = str(path)
-    update._save_config(data)
+    navigation._save_config(data)
 
 
 def _configured_book() -> tuple[Path | None, bool, str | None]:
     """Return the active book, whether it is built in, and a status message."""
     builtin_path, builtin_error = _ensure_builtin_book()
-    data = update._config()
+    data = navigation._config()
     configured = data.get("opening_book_path")
     custom_path = Path(configured) if isinstance(configured, str) else None
     mode = data.get("opening_book_mode")
 
-    # Preserve custom-book choices made by older versions.
     if mode not in {"builtin", "custom"}:
         mode = "custom" if custom_path is not None and custom_path.is_file() else "builtin"
 
@@ -178,8 +177,8 @@ def show_opening_explorer() -> None:
 
         view = np.zeros((780, 1280, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
-        base._put(view, "Opening Explorer", (38, 52), (100, 220, 255), 0.95, 2)
-        base._put(
+        ui._put(view, "Opening Explorer", (38, 52), (100, 220, 255), 0.95, 2)
+        ui._put(
             view,
             "Explore moves from the built-in book or a custom Polyglot .bin file.",
             (40, 83),
@@ -197,9 +196,9 @@ def show_opening_explorer() -> None:
         else:
             book_name = f"Custom: {book_path.name}"
 
-        base._put(view, "ACTIVE BOOK", (640, 122), (165, 175, 190), 0.46)
-        base._put(view, book_name[:48], (640, 154), (120, 255, 170), 0.58)
-        base._put(
+        ui._put(view, "ACTIVE BOOK", (640, 122), (165, 175, 190), 0.46)
+        ui._put(view, book_name[:48], (640, 154), (120, 255, 170), 0.58)
+        ui._put(
             view,
             f"Position after {board.ply()} half-moves",
             (640, 190),
@@ -217,7 +216,15 @@ def show_opening_explorer() -> None:
             44,
             enabled=not using_builtin,
         )
-        reset = Button("reset", "RESET", 640, 218, 150, 44, enabled=bool(board.move_stack))
+        reset = Button(
+            "reset",
+            "RESET",
+            640,
+            218,
+            150,
+            44,
+            enabled=bool(board.move_stack),
+        )
         undo = Button(
             "undo",
             "BACK MOVE",
@@ -232,9 +239,9 @@ def show_opening_explorer() -> None:
         for button in buttons:
             pregame_ui.draw_button(view, button)
 
-        base._put(view, "BOOK MOVES", (640, 302), (100, 220, 255), 0.54)
+        ui._put(view, "BOOK MOVES", (640, 302), (100, 220, 255), 0.54)
         if book_path is None:
-            base._put(
+            ui._put(
                 view,
                 "The built-in book could not be prepared. Choose another .bin file.",
                 (640, 340),
@@ -242,7 +249,7 @@ def show_opening_explorer() -> None:
                 0.43,
             )
         elif not entries and not book_error:
-            base._put(
+            ui._put(
                 view,
                 "This position has no moves in the active book.",
                 (640, 340),
@@ -271,10 +278,10 @@ def show_opening_explorer() -> None:
                 pregame_ui.draw_button(view, move_button)
 
         fen = board.fen()
-        base._put(view, "FEN", (40, 725), (100, 220, 255), 0.42)
-        base._put(view, fen[:88], (85, 725), (185, 195, 210), 0.36)
+        ui._put(view, "FEN", (40, 725), (100, 220, 255), 0.42)
+        ui._put(view, fen[:88], (85, 725), (185, 195, 210), 0.36)
         if message:
-            base._put(view, message[:82], (640, 745), (120, 220, 255), 0.40)
+            ui._put(view, message[:82], (640, 745), (120, 220, 255), 0.40)
 
         cv2.imshow(WINDOW_NAME, view)
         key = cv2.waitKey(25) & 0xFF

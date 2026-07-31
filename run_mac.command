@@ -43,5 +43,6 @@ if [[ ! -x ".venv/bin/python" ]]; then
     .venv/bin/python -m pip install -r requirements.txt
 fi
 
-echo "Starting Chess Camera 0.36..."
+APP_VERSION="$(.venv/bin/python -c 'from version import APP_VERSION; print(APP_VERSION)')"
+echo "Starting Chess Camera ${APP_VERSION}..."
 .venv/bin/python chess_camera.py "$@"

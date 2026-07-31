@@ -6,13 +6,10 @@ import cv2
 import numpy as np
 
 import app
+import app_navigation as navigation
 import pregame_ui
-import revision35 as base
-import revision35_update as update
+import ui_support as ui
 from pregame_ui import Button
-
-
-SESSION_BOARD_CALIBRATED = False
 
 
 def draw_evaluation_bar_left(
@@ -37,38 +34,14 @@ def draw_evaluation_bar_left(
     )
 
 
-def install_non_overlapping_setup_buttons() -> None:
-    """Redraw the initial setup navigation without covering Check all 64 squares."""
-    original_render = app.render_setup_screen
-
-    def render(*args: object, **kwargs: object):
-        view, buttons = original_render(*args, **kwargs)
-        if not update.IN_INITIAL_SETUP:
-            return view, buttons
-
-        buttons = [
-            button
-            for button in buttons
-            if button.action not in {"revision35_home", "start"}
-        ]
-        cv2.rectangle(view, (721, 832), (1070, 906), (28, 31, 37), -1)
-        back = Button("revision35_home", "BACK", 735, 840, 125, 58)
-        start = Button("start", "START GAME", 880, 840, 180, 58, active=True)
-        buttons.extend((back, start))
-        pregame_ui.draw_button(view, back)
-        pregame_ui.draw_button(view, start)
-        return view, buttons
-
-    app.render_setup_screen = render
-
-
-def _analysis_files_for_game(item: base.HistoryGame) -> list[Path]:
+def _analysis_files_for_game(item: ui.HistoryGame) -> list[Path]:
     paths = [
         item.path.with_suffix(".analysis.json"),
-        update.GAMES_DIR / f"{item.path.stem}_analysis.json",
+        navigation.GAMES_DIR / f"{item.path.stem}_analysis.json",
     ]
     if item.path.name == "latest_game.pgn":
-        paths.append(update.GAMES_DIR / "latest_analysis.json")
+        paths.append(navigation.GAMES_DIR / "latest_analysis.json")
+
     unique: list[Path] = []
     for path in paths:
         if path not in unique:
@@ -76,7 +49,7 @@ def _analysis_files_for_game(item: base.HistoryGame) -> list[Path]:
     return unique
 
 
-def delete_history_game(item: base.HistoryGame) -> tuple[bool, str]:
+def delete_history_game(item: ui.HistoryGame) -> tuple[bool, str]:
     confirmed = app.ask_yes_no(
         "Delete recorded game?",
         (
@@ -93,6 +66,7 @@ def delete_history_game(item: base.HistoryGame) -> tuple[bool, str]:
             path.unlink(missing_ok=True)
         except OSError as error:
             errors.append(f"{path.name}: {error}")
+
     if errors:
         return False, "Could not delete every file: " + "; ".join(errors)
     return True, "Game deleted."
@@ -122,7 +96,7 @@ def show_game_history() -> None:
 
     cv2.setMouseCallback(window, mouse)
     while True:
-        games = base.load_history()
+        games = ui.load_history()
         visible = 8
         scroll = max(0, min(scroll, max(0, len(games) - visible)))
         if games:
@@ -137,8 +111,8 @@ def show_game_history() -> None:
 
         view = np.zeros((760, 1180, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
-        base._put(view, "Game History", (35, 48), (100, 220, 255), 0.95, 2)
-        base._put(
+        ui._put(view, "Game History", (35, 48), (100, 220, 255), 0.95, 2)
+        ui._put(
             view,
             "Recorded over-the-board games",
             (35, 80),
@@ -148,12 +122,13 @@ def show_game_history() -> None:
         buttons = []
 
         if not games:
-            base._put(
+            ui._put(
                 view,
                 "No completed games found in the games folder.",
                 (40, 145),
                 scale=0.62,
             )
+
         for row, item in enumerate(games[scroll : scroll + visible]):
             index = scroll + row
             y = 110 + row * 70
@@ -167,13 +142,13 @@ def show_game_history() -> None:
                 (120, 255, 170) if active else (85, 92, 105),
                 2,
             )
-            base._put(
+            ui._put(
                 view,
                 f"{item.white[:20]}  {item.result}  {item.black[:20]}",
                 (50, y + 25),
                 scale=0.58,
             )
-            base._put(
+            ui._put(
                 view,
                 f"{item.date}   {item.moves} moves   {item.time_control}",
                 (50, y + 48),
@@ -199,7 +174,7 @@ def show_game_history() -> None:
 
         if games:
             item = games[selected]
-            base._put(view, "GAME DETAILS", (820, 115), (100, 220, 255), 0.58)
+            ui._put(view, "GAME DETAILS", (820, 115), (100, 220, 255), 0.58)
             details = [
                 f"White: {item.white}",
                 f"Black: {item.black}",
@@ -221,7 +196,7 @@ def show_game_history() -> None:
                 ),
             ]
             for index, line in enumerate(details):
-                base._put(view, line[:43], (820, 160 + index * 38), scale=0.50)
+                ui._put(view, line[:43], (820, 160 + index * 38), scale=0.50)
 
             review = Button(
                 "review",
@@ -239,7 +214,8 @@ def show_game_history() -> None:
                 pregame_ui.draw_button(view, button)
 
         if message:
-            base._put(view, message[:55], (820, 710), (120, 220, 255), 0.43)
+            ui._put(view, message[:55], (820, 710), (120, 220, 255), 0.43)
+
         cv2.imshow(window, view)
         key = cv2.waitKey(25) & 0xFF
         action = queue.pop(0) if queue else None
@@ -252,12 +228,12 @@ def show_game_history() -> None:
         elif action == "down" or key in (84, ord("s")):
             scroll += 1
         elif action == "review" and games:
-            update.review_game(games[selected])
+            navigation.review_game(games[selected])
             cv2.namedWindow(window, cv2.WINDOW_NORMAL)
             cv2.setMouseCallback(window, mouse)
         elif action == "copy_pgn" and games:
             try:
-                copied = update.copy_text(
+                copied = navigation.copy_text(
                     games[selected].path.read_text(encoding="utf-8")
                 )
                 message = (
@@ -275,13 +251,19 @@ def show_game_history() -> None:
             cv2.destroyWindow(window)
             return
 
+        try:
+            if cv2.getWindowProperty(window, cv2.WND_PROP_VISIBLE) < 1:
+                return
+        except cv2.error:
+            return
+
 
 def forget_saved_board_calibration() -> None:
-    """Remove only board-corner calibration; keep phone, players and engine settings."""
-    data = update._config()
+    """Remove only board-corner calibration; keep other saved settings."""
+    data = navigation._config()
     data.pop("board_corners", None)
     data.pop("corners", None)
-    update._save_config(data)
+    navigation._save_config(data)
 
     try:
         store = app.BoardProfileStore(app.PROFILE_DIRECTORY)
@@ -292,47 +274,3 @@ def forget_saved_board_calibration() -> None:
             store.save(profile)
     except (OSError, ValueError, TypeError):
         pass
-
-
-def run_game() -> bool:
-    global SESSION_BOARD_CALIBRATED
-
-    if not SESSION_BOARD_CALIBRATED:
-        forget_saved_board_calibration()
-        SESSION_BOARD_CALIBRATED = True
-
-    before = update.latest_mtime()
-    try:
-        app.main()
-    except update.ReturnToHome:
-        return False
-    after = update.latest_mtime()
-    return after is not None and after != before and update.LAST_SETUP is not None
-
-
-def main() -> None:
-    base.install_setup_patches()
-    update.install_navigation_patches()
-    install_non_overlapping_setup_buttons()
-    app.draw_evaluation_bar = draw_evaluation_bar_left
-
-    while True:
-        action = update.home_screen()
-        if action == "history":
-            show_game_history()
-        elif action == "settings":
-            update.settings_screen()
-        elif action == "start":
-            saved = run_game()
-            while saved:
-                post_action = update.post_game_screen()
-                if post_action != "rematch" or update.LAST_SETUP is None:
-                    break
-                update.REMATCH_SETUP = update.LAST_SETUP
-                saved = run_game()
-        else:
-            return
-
-
-if __name__ == "__main__":
-    main()

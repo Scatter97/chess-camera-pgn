@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.36.1
+
+Patch release.
+
+- Removed obsolete Revision 35 entry files, launchers, and legacy notes.
+- Renamed the active support code to permanent module names.
+- Removed Revision 35-specific imports and navigation action names from the current app.
+- Restored a longer, detailed README covering setup, calibration, clocks, detection, training, analysis, Chess960, opening books, installation, privacy, and troubleshooting.
+- Updated the displayed version to 0.36.1.
+- Updated the macOS launcher so it reads the version from `version.py` instead of hard-coding it.
+
 ## 0.36
 
 Major feature release.
