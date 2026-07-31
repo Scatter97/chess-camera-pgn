@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.36.2
+
+Patch release.
+
+- Removed Ubuntu/Linux OpenCV Qt toolbar controls from app windows.
+- Removed the pixel-coordinate and RGB status readout shown below OpenCV windows.
+- Kept all OpenCV windows resizable by combining `WINDOW_NORMAL` with `WINDOW_GUI_NORMAL` on Linux.
+- Applied the behavior globally at app startup so the main menu, calibration, setup, history, review, Chess960, and Opening Explorer windows use the cleaner interface.
+
 ## 0.36.1
 
 Patch release.
