@@ -9,11 +9,13 @@ from runtime_paths import bootstrap_runtime
 # module-level relative paths are created.
 bootstrap_runtime()
 
-# frozen_app.py is generated from app.py with the 0.39 runtime source patches
-# applied before PyInstaller performs its analysis.
+# frozen_app.py is generated from app.py with the stable 0.39.7 and isolated
+# experimental multi-move patches applied before PyInstaller analysis.
 import frozen_app as app  # type: ignore[import-not-found]  # noqa: E402
 
 app._RUNTIME_039_PATCHED = True
+app._RUNTIME_0397_PATCHED = True
+app._RUNTIME_MULTI_MOVE_PATCHED = True
 sys.modules["app"] = app
 
 import chess_camera  # noqa: E402
