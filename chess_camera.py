@@ -11,6 +11,7 @@ import camera_advanced
 import chess960_generator
 import game_history
 import game_session
+import local64_occlusion_fix
 import local_detection
 import local_detection_runtime
 import opening_explorer
@@ -175,6 +176,7 @@ def main() -> None:
         engine_settings_screen,
     )
     local_detection_runtime.install(app)
+    local64_occlusion_fix.install()
     install_camera_config_persistence()
     install_accuracy_sampling_sync()
 
