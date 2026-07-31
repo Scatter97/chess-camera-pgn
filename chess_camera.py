@@ -15,12 +15,13 @@ import game_session
 import local64_occlusion_fix
 import local_detection
 import local_detection_runtime
+import multi_move_settings
 import opening_explorer
 import piece_theme_system
 import pregame_ui
 import promotion_popup
 import review_ui_fix
-import runtime_0397_patch
+import runtime_multi_move_patch
 import training_settings
 import ui_support as ui
 from pregame_ui import Button
@@ -41,6 +42,10 @@ CAMERA_CONFIG_KEYS = (
     "sound_pack",
     "piece_sounds_enabled",
     "move_highlights_enabled",
+    "experimental_multi_move_enabled",
+    "experimental_multi_move_max_depth",
+    "experimental_multi_move_auto_accept",
+    "experimental_multi_move_auto_threshold",
 )
 
 
@@ -58,7 +63,7 @@ def home_screen() -> str:
         Button("settings", "SETTINGS", 405, 360, 310, 105),
         Button(
             "future",
-            "MORE FEATURES SOON",
+            "EXPERIMENTAL BRANCH",
             755,
             360,
             310,
@@ -83,7 +88,7 @@ def home_screen() -> str:
         ui._put(view, VERSION_LABEL, (57, 120), (120, 255, 170), 0.62)
         ui._put(
             view,
-            "Record games, review them, and use local chess tools.",
+            "Experimental branch: legal multi-move recovery is available in Settings.",
             (57, 155),
             (165, 175, 190),
             0.52,
@@ -98,15 +103,15 @@ def home_screen() -> str:
             ("Random legal start position", 775, 320),
             ("Built-in or custom book", 75, 500),
             ("Engine and app options", 425, 500),
-            ("Reserved expansion space", 775, 500),
+            ("Multi-move test build", 775, 500),
         ]
         for text, x, y in descriptions:
             ui._put(view, text, (x, y), (175, 185, 200), 0.40)
 
         ui._put(
             view,
-            "Feature cards can be replaced or expanded in later versions.",
-            (320, 725),
+            "Keep main for stable games; test this branch separately.",
+            (365, 725),
             (135, 145, 160),
             0.42,
         )
@@ -135,7 +140,7 @@ def home_screen() -> str:
 
 
 def install_camera_config_persistence() -> None:
-    """Keep camera, detection, theme, and sound settings when setup is saved."""
+    """Keep camera, detection, theme, sound, and experimental settings."""
     original_save = app.save_config
 
     def save_with_camera_settings(*args: object, **kwargs: object) -> None:
@@ -170,7 +175,7 @@ def install_accuracy_sampling_sync() -> None:
 
 
 def main() -> None:
-    runtime_0397_patch.install(app)
+    runtime_multi_move_patch.install(app)
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_cleanup.install(calibration_ui)
@@ -196,6 +201,7 @@ def main() -> None:
     training_settings.install(app, navigation)
     piece_theme_system.install(app)
     feature_settings.install(app, navigation)
+    multi_move_settings.install(feature_settings, app)
 
     while True:
         action = home_screen()
