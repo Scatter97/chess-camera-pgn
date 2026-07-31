@@ -136,12 +136,28 @@ def install_camera_config_persistence() -> None:
     app.save_config = save_with_camera_settings
 
 
+def install_accuracy_sampling_sync() -> None:
+    """Make Accuracy Boost wait for distinct detection samples."""
+    original_open = app.open_camera
+
+    def open_with_detection_timing(index: int):
+        capture = original_open(index)
+        app.ACCURACY_SAMPLE_INTERVAL = max(
+            0.06,
+            1.0 / max(1, camera_advanced.RUNTIME.target_fps),
+        )
+        return capture
+
+    app.open_camera = open_with_detection_timing
+
+
 def main() -> None:
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_ui.install(app)
     camera_advanced.install(app, navigation)
     install_camera_config_persistence()
+    install_accuracy_sampling_sync()
     navigation.install_navigation_patches()
     game_session.install_consolidated_setup_ui()
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
