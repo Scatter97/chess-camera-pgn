@@ -158,19 +158,15 @@ def show_game_history() -> None:
             buttons.append(Button(f"select_{index}", "", 35, y, 735, 58))
 
         back = Button("back", "BACK", 35, 690, 170, 48)
-        up = Button("up", "UP", 225, 690, 110, 48, enabled=scroll > 0)
-        down = Button(
-            "down",
-            "DOWN",
-            350,
-            690,
-            110,
-            48,
-            enabled=scroll + visible < len(games),
+        buttons.append(back)
+        pregame_ui.draw_button(view, back)
+        ui._put(
+            view,
+            "Scroll with the mouse wheel or use the keyboard arrows.",
+            (230, 721),
+            (135, 145, 160),
+            0.42,
         )
-        buttons.extend((back, up, down))
-        for button in (back, up, down):
-            pregame_ui.draw_button(view, button)
 
         if games:
             item = games[selected]
@@ -210,8 +206,8 @@ def show_game_history() -> None:
             copy_pgn = Button("copy_pgn", "COPY PGN", 820, 610, 150, 52)
             delete = Button("delete", "DELETE", 985, 610, 150, 52)
             buttons.extend((review, copy_pgn, delete))
-            for button in (review, copy_pgn, delete):
-                pregame_ui.draw_button(view, button)
+            for item_button in (review, copy_pgn, delete):
+                pregame_ui.draw_button(view, item_button)
 
         if message:
             ui._put(view, message[:55], (820, 710), (120, 220, 255), 0.43)
@@ -223,9 +219,9 @@ def show_game_history() -> None:
         if action and action.startswith("select_"):
             selected = int(action.split("_", 1)[1])
             message = ""
-        elif action == "up" or key in (82, ord("w")):
+        elif key in (82, ord("w")):
             scroll -= 1
-        elif action == "down" or key in (84, ord("s")):
+        elif key in (84, ord("s")):
             scroll += 1
         elif action == "review" and games:
             navigation.review_game(games[selected])
