@@ -6,3 +6,5 @@ camera_config.json
 board_profiles/
 engines/
 games/
+books/*.bin
+books/*.bin.tmp
