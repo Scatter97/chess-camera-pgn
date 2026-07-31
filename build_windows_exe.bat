@@ -7,8 +7,12 @@ if exist dist rmdir /s /q dist
 if exist release rmdir /s /q release
 mkdir release
 
+set "PYTHON_BOOTSTRAP=python"
+where python >nul 2>nul
+if errorlevel 1 set "PYTHON_BOOTSTRAP=py"
+
 if not exist ".venv-build\Scripts\python.exe" (
-    py -m venv .venv-build
+    %PYTHON_BOOTSTRAP% -m venv .venv-build
 )
 
 .venv-build\Scripts\python.exe -m pip install --upgrade pip
