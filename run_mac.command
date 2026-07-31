@@ -43,5 +43,5 @@ if [[ ! -x ".venv/bin/python" ]]; then
     .venv/bin/python -m pip install -r requirements.txt
 fi
 
-echo "Starting Chess Camera..."
-.venv/bin/python app.py "$@"
+echo "Starting Chess Camera Rev. 35 (Main Menu Update)..."
+.venv/bin/python revision35_final.py "$@"
