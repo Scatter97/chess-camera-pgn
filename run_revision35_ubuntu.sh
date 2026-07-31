@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -e
-if [ -x .venv/bin/python ]; then .venv/bin/python revision35.py "$@"; else python3 revision35.py "$@"; fi
+cd "$(dirname "$0")"
+if [ -x .venv/bin/python ]; then .venv/bin/python revision35_update.py "$@"; else python3 revision35_update.py "$@"; fi
