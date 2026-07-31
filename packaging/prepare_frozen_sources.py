@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from runtime_app_patch import apply_source_patches
+
+
+ROOT = Path(__file__).resolve().parents[1]
+GENERATED_DIRECTORY = ROOT / "build" / "generated"
+GENERATED_APP = GENERATED_DIRECTORY / "frozen_app.py"
+
+
+def main() -> Path:
+    """Write app.py with runtime reliability patches applied at build time."""
+    source = (ROOT / "app.py").read_text(encoding="utf-8")
+    patched = apply_source_patches(source)
+    GENERATED_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    (GENERATED_DIRECTORY / "__init__.py").write_text("", encoding="utf-8")
+    GENERATED_APP.write_text(
+        patched
+        + "\n\n# PyInstaller builds use this already-patched module directly.\n"
+        + "_RUNTIME_039_PATCHED = True\n",
+        encoding="utf-8",
+    )
+    print(f"Generated {GENERATED_APP.relative_to(ROOT)}")
+    return GENERATED_APP
+
+
+if __name__ == "__main__":
+    main()
