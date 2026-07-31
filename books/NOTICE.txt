@@ -1,0 +1,17 @@
+Chess Camera built-in opening book notice
+
+Current app release: 0.36.1
+
+The human-readable opening lines in default_openings.tsv were curated from the
+lichess-org/chess-openings dataset.
+
+Source project: lichess-org/chess-openings
+Dataset dedication: CC0 1.0 Universal Public Domain Dedication
+
+Chess Camera converts default_openings.tsv into the local generated file
+chess_camera_default.bin through python-chess Polyglot support. The generated
+.bin file is excluded from Git because it can be rebuilt automatically.
+
+No third-party commercial opening book is bundled. Users may select another
+Polyglot .bin book, but they are responsible for following that book's license
+and redistribution terms.
