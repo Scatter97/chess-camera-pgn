@@ -5,16 +5,23 @@ import numpy as np
 
 import app
 import app_navigation as navigation
+import calibration_cleanup
 import calibration_ui
 import camera_advanced
 import chess960_generator
+import feature_settings
 import game_history
 import game_session
+import local64_occlusion_fix
 import local_detection
 import local_detection_runtime
 import opening_explorer
+import piece_theme_system
 import pregame_ui
 import promotion_popup
+import review_ui_fix
+import runtime_0397_patch
+import training_settings
 import ui_support as ui
 from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
@@ -28,6 +35,12 @@ CAMERA_CONFIG_KEYS = (
     "camera_debug_overlay",
     "local_detection_beta",
     "local_detection_sensitivity",
+    "advanced_auto_accept_enabled",
+    "advanced_auto_accept_threshold",
+    "piece_pack",
+    "sound_pack",
+    "piece_sounds_enabled",
+    "move_highlights_enabled",
 )
 
 
@@ -122,7 +135,7 @@ def home_screen() -> str:
 
 
 def install_camera_config_persistence() -> None:
-    """Keep camera and experimental settings when game options are saved."""
+    """Keep camera, detection, theme, and sound settings when setup is saved."""
     original_save = app.save_config
 
     def save_with_camera_settings(*args: object, **kwargs: object) -> None:
@@ -157,8 +170,10 @@ def install_accuracy_sampling_sync() -> None:
 
 
 def main() -> None:
+    runtime_0397_patch.install(app)
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
+    calibration_cleanup.install(calibration_ui)
     calibration_ui.install(app)
 
     engine_settings_screen = navigation.settings_screen
@@ -169,6 +184,7 @@ def main() -> None:
         engine_settings_screen,
     )
     local_detection_runtime.install(app)
+    local64_occlusion_fix.install()
     install_camera_config_persistence()
     install_accuracy_sampling_sync()
 
@@ -176,6 +192,10 @@ def main() -> None:
     game_session.install_consolidated_setup_ui()
     promotion_popup.install(app)
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
+    review_ui_fix.install(app)
+    training_settings.install(app, navigation)
+    piece_theme_system.install(app)
+    feature_settings.install(app, navigation)
 
     while True:
         action = home_screen()

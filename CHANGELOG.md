@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.39.7
+
+Piece appearance and sound release.
+
+- Replaced letter-in-circle virtual pieces with an original Staunton-inspired PNG piece pack.
+- Applied the selected piece pack to the live game, illegal correction, manual synchronization, game review, and analysis boards.
+- Added support for custom piece packs placed in `piece_packs/<pack name>/` with twelve transparent PNG files.
+- Added **Board Appearance and Sounds** settings with piece-pack selection and direct access to the custom-pack folders.
+- Added move, capture, check, castling, and promotion sounds.
+- Bundled two locally generated sound packs: **Classic Wood** and **Soft Digital**.
+- Added support for custom WAV sound packs placed in `sound_packs/<pack name>/`.
+- Added sound enable/disable, sound-pack selection, and a test-sound button.
+- Restored yellow move highlights over the calibrated camera preview after a move is recorded.
+- Added a setting to enable or disable camera move highlights.
+
+## 0.39.6
+
+Advanced detection and board synchronization release.
+
+- Added **Advanced Detection** settings.
+- Added an optional confidence-based auto-approval toggle.
+- Added a user-adjustable auto-approval threshold from 50% to 99%.
+- Moves at or above the selected confidence are accepted automatically; lower-confidence moves stay available for manual approval.
+- Added **Edit Virtual Board** during a game.
+- Manual board synchronization pauses the built-in clock and uses the existing live virtual-board layout.
+- Players can drag one or more legal moves, undo edits, reset the editor, cancel, or save the synchronized position.
+- Saved synchronization moves are appended to the PGN, the camera reference is refreshed, and the built-in clock resumes for the correct side.
+- Added automated tests for threshold persistence, manual legal-move synchronization, piece packs, sound packs, and runtime source integration.
+- Added a GitHub Actions workflow for compilation and pytest checks.
+
+## 0.39
+
+Reliability release.
+
+- Removed the camera calibration inner preview rectangle after calibration cleanup.
+- Fixed review-board move navigation so selecting a move immediately updates the virtual board position.
+- Removed Game History up/down controls and simplified history navigation.
+- Added advanced board training controls under Settings.
+- Added undo training cleanup so removed moves can restore the previous training state.
+- Added rejected detection examples so false detections improve future filtering without remaining accepted samples.
+- Added illegal move recovery mode with a virtual-board editor.
+- Added **MOVE WAS LEGAL - FIX BOARD** correction flow with drag-and-drop editing.
+- Paused the built-in clock during illegal correction and resumed the correct side after a validated correction.
+- Added tests for training rollback, illegal correction drag validation, castling correction, startup patching, and clock behavior.
+
 ## 0.38
 
 Major feature release.
@@ -42,44 +87,3 @@ Patch release.
 - Added basic geometry validation for crossed, tiny, extremely narrow, or overlapping corner selections.
 - Added an optional calibration debug panel showing incoming resolution, camera-reported FPS, and OpenCV backend.
 - Kept the original calibration functions available as implementation fallback while installing the new interface at app startup.
-
-## 0.36.2
-
-Patch release.
-
-- Removed Ubuntu/Linux OpenCV Qt toolbar controls from app windows.
-- Removed the pixel-coordinate and RGB status readout shown below OpenCV windows.
-- Kept all OpenCV windows resizable by combining `WINDOW_NORMAL` with `WINDOW_GUI_NORMAL` on Linux.
-- Applied the behavior globally at app startup so the main menu, calibration, setup, history, review, Chess960, and Opening Explorer windows use the cleaner interface.
-
-## 0.36.1
-
-Patch release.
-
-- Removed obsolete Revision 35 entry files, launchers, and legacy notes.
-- Renamed the active support code to permanent module names.
-- Removed Revision 35-specific imports and navigation action names from the current app.
-- Restored a longer, detailed README covering setup, calibration, clocks, detection, training, analysis, Chess960, opening books, installation, privacy, and troubleshooting.
-- Updated the displayed version to 0.36.1.
-- Updated the macOS launcher so it reads the version from `version.py` instead of hard-coding it.
-
-## 0.36
-
-Major feature release.
-
-- Added a built-in CC0-derived opening book source.
-- The app automatically generates a local Polyglot `.bin` book when Opening Explorer is first opened.
-- Added **Use Built-in** so users can return from a custom book to the included book.
-- Kept **Choose Book...** for user-supplied Polyglot books.
-- Added validation and automatic fallback when a custom book is missing or unreadable.
-- Added a reusable Polyglot book builder and a tool for generating a larger book from the full `lichess-org/chess-openings` dataset.
-- Added `chess_camera.py` as the current entry point.
-- Added centralized version information in `version.py`.
-- Adopted the `0.xx` feature-release and `0.xx.xx` patch-release system.
-
-## 0.35
-
-- Added the scalable main menu.
-- Added Game History, Settings, rematches, board options, and engine selection.
-- Added the Chess960 generator and Opening Explorer.
-- Updated Chess960 to use the live-game and Stockfish-analysis piece renderer.

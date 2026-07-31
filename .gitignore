@@ -1,4 +1,5 @@
 .venv/
+.venv-build/
 __pycache__/
 .pytest_cache/
 *.py[cod]
@@ -6,5 +7,13 @@ camera_config.json
 board_profiles/
 engines/
 games/
+piece_packs/
+sound_packs/
 books/*.bin
 books/*.bin.tmp
+build/
+dist/
+release/
+*.deb
+*.dmg
+*.zip
