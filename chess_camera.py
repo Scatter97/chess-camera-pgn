@@ -10,8 +10,10 @@ import camera_advanced
 import chess960_generator
 import game_history
 import game_session
+import local_detection
 import opening_explorer
 import pregame_ui
+import promotion_popup
 import ui_support as ui
 from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
@@ -23,6 +25,8 @@ CAMERA_CONFIG_KEYS = (
     "detection_fps",
     "detection_resolution",
     "camera_debug_overlay",
+    "local_detection_beta",
+    "local_detection_sensitivity",
 )
 
 
@@ -117,7 +121,7 @@ def home_screen() -> str:
 
 
 def install_camera_config_persistence() -> None:
-    """Keep camera settings when the legacy config writer saves game options."""
+    """Keep camera and experimental settings when game options are saved."""
     original_save = app.save_config
 
     def save_with_camera_settings(*args: object, **kwargs: object) -> None:
@@ -155,11 +159,20 @@ def main() -> None:
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_ui.install(app)
+
+    engine_settings_screen = navigation.settings_screen
     camera_advanced.install(app, navigation)
+    local_detection.install(
+        app,
+        navigation,
+        engine_settings_screen,
+    )
     install_camera_config_persistence()
     install_accuracy_sampling_sync()
+
     navigation.install_navigation_patches()
     game_session.install_consolidated_setup_ui()
+    promotion_popup.install(app)
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
 
     while True:
