@@ -44,4 +44,4 @@ if [[ ! -x ".venv/bin/python" ]]; then
 fi
 
 echo "Starting Chess Camera Rev. 35 (Main Menu Update)..."
-.venv/bin/python revision35_chess960.py "$@"
+.venv/bin/python revision35_features.py "$@"
