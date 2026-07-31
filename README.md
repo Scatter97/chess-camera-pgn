@@ -47,7 +47,7 @@ Use **Board options** to open a separate menu containing:
 - **Reset training**
 - **Close**
 
-Creating a new board profile asks for its name. Board profiles keep their own learning data, orientation, clock mapping, and other board-specific settings.
+The Board Options window can be closed with its Close button, Escape, or the window’s X. Creating a new board profile asks for its name.
 
 ## Game history
 
