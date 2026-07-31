@@ -15,4 +15,4 @@ if [[ ! -x ".venv/bin/python" ]]; then
     .venv/bin/python -m pip install -r requirements.txt
 fi
 
-exec .venv/bin/python revision35_final.py "$@"
+exec .venv/bin/python revision35_chess960.py "$@"
