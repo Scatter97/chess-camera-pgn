@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.37
+
+Major feature release.
+
+- Added **Advanced Camera Settings** under the main Settings menu.
+- Added saved camera selection with friendly Linux device names and `/dev/video*` paths.
+- Added camera refresh and a full-speed preview test for checking the selected device.
+- Added independently configurable detection frame rates of 3, 5, 10, or 15 FPS.
+- Added detection resolutions of 320×240, 640×480, 960×540, or 1280×720.
+- Split the live preview from board analysis so every incoming camera frame can be displayed while detection samples at the selected rate.
+- Added optional live diagnostics showing measured preview FPS, measured and target detection FPS, input resolution, detection resolution, selected camera, backend, and driver-reported FPS.
+- Saved camera settings in `camera_config.json` and preserved them when the existing game-setup configuration is written.
+- Kept the `--camera` command-line option as an explicit override of the saved camera selection.
+- Added automated tests for settings validation, command-line camera overrides, detection resizing, corner-coordinate scaling, and detection-frame caching.
+
 ## 0.36.3
 
 Patch release.
