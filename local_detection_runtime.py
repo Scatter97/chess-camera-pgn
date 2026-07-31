@@ -31,6 +31,27 @@ def stable_legal_move_visible(
     return False
 
 
+def filter_change_scores(
+    board: chess.Board | None,
+    raw_scores: dict[chess.Square, float],
+    unstable: frozenset[chess.Square],
+) -> dict[chess.Square, float]:
+    """Hide moving squares but preserve complete legal or fully stable changes."""
+    filtered = {
+        square: (0.0 if square in unstable else value)
+        for square, value in raw_scores.items()
+    }
+    if board is None or not unstable:
+        return filtered
+    if stable_legal_move_visible(board, filtered, unstable):
+        return filtered
+
+    # The hand is still over an affected square or only part of a move is
+    # visible. Zero evidence makes the main loop wait instead of raising an
+    # illegal-move warning before the move squares have settled.
+    return {square: 0.0 for square in chess.SQUARES}
+
+
 def install(target: ModuleType) -> None:
     """Add distinct-sample timing and affected-square stability safeguards."""
     if getattr(target, "_local_detection_runtime_installed", False):
@@ -77,36 +98,11 @@ def install(target: ModuleType) -> None:
         raw_scores = original_square_change_scores(reference, current)
         if not state.enabled:
             return raw_scores
-
-        filtered = {
-            square: (
-                0.0
-                if square in state.current_unstable
-                else value
-            )
-            for square, value in raw_scores.items()
-        }
-        board = state.board
-        if board is None:
-            return filtered
-
-        # Once the entire board is stable, pass every stable change through.
-        # This allows illegal positions and extra displaced pieces to reach the
-        # normal illegal-move recovery logic instead of being hidden forever.
-        if not state.current_unstable:
-            return filtered
-
-        if stable_legal_move_visible(
-            board,
-            filtered,
+        return filter_change_scores(
+            state.board,
+            raw_scores,
             state.current_unstable,
-        ):
-            return filtered
-
-        # The hand is still over an affected square or only part of a move is
-        # visible. Zero evidence makes the main loop wait instead of raising an
-        # illegal-move warning before the move squares have settled.
-        return {square: 0.0 for square in chess.SQUARES}
+        )
 
     def render_virtual_board(
         board: chess.Board,
