@@ -11,6 +11,7 @@ import chess960_generator
 import game_history
 import game_session
 import local_detection
+import local_detection_runtime
 import opening_explorer
 import pregame_ui
 import promotion_popup
@@ -167,6 +168,7 @@ def main() -> None:
         navigation,
         engine_settings_screen,
     )
+    local_detection_runtime.install(app)
     install_camera_config_persistence()
     install_accuracy_sampling_sync()
 
