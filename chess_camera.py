@@ -17,6 +17,8 @@ import opening_explorer
 import pregame_ui
 import promotion_popup
 import review_ui_fix
+import runtime_app_patch
+import training_settings
 import ui_support as ui
 from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
@@ -159,6 +161,7 @@ def install_accuracy_sampling_sync() -> None:
 
 
 def main() -> None:
+    runtime_app_patch.install(app)
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_cleanup.install(calibration_ui)
@@ -180,6 +183,7 @@ def main() -> None:
     promotion_popup.install(app)
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
     review_ui_fix.install(app)
+    training_settings.install(app, navigation)
 
     while True:
         action = home_screen()
