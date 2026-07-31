@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.38
+
+Major feature release.
+
+- Added **Experimental Features** under the main Settings menu.
+- Added an optional **64-Square Local Detection (Beta)** toggle, disabled by default.
+- Added Low, Normal, and High local-detection sensitivity settings, with Normal recommended.
+- Split board-motion checking into 64 independent square regions so unrelated moving squares can be ignored while the squares involved in a legal move settle.
+- Preserved full expected-square handling for captures, castling, en passant, and promotion.
+- Kept stable unexpected changes as evidence against a candidate move so extra displaced pieces can still trigger illegal-position recovery.
+- Applied local filtering to normal detection, Accuracy Boost consensus, move confidence, legal-move fit, and illegal-position restoration.
+- Added a `LOCAL64` indicator to the camera diagnostics while the beta feature is active.
+- Removed the permanent Queen, Rook, Bishop, and Knight buttons from the match screen.
+- Promotion choices now remain in the dedicated promotion popup that appears when a promotion move is detected.
+- Added automated tests for beta settings, square-level motion, candidate filtering, legal-move fit, castling, en passant, and popup-only promotion controls.
+
 ## 0.37
 
 Major feature release.
