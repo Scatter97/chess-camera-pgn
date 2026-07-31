@@ -9,11 +9,11 @@ import local_detection_runtime
 from chess_tracker import move_changed_squares
 
 
-# LOW is the strictest option. It requires stronger move evidence and treats
-# broad changes as an obstruction sooner.
+# LOW is the strictest option. NORMAL keeps the original move-evidence floor,
+# while HIGH accepts weaker visual changes for difficult camera setups.
 MOVE_EVIDENCE_THRESHOLDS = {
     "low": 11.0,
-    "normal": 8.0,
+    "normal": 7.0,
     "high": 6.5,
 }
 OCCLUSION_SCORE_THRESHOLDS = {
@@ -96,17 +96,15 @@ def update_persistent_occlusion(
     raw_scores: dict[chess.Square, float],
     unstable: frozenset[chess.Square],
 ) -> frozenset[chess.Square]:
-    """Keep a blocked region masked until it returns to the reference image."""
+    """Keep only dense blocked regions masked until the reference returns."""
     state = local_detection.STATE
     persistent = set(getattr(state, "blocked_squares", frozenset()))
-    sensitivity = state.sensitivity
 
-    if len(unstable) >= MASS_CHANGE_SQUARES.get(
-        sensitivity,
-        MASS_CHANGE_SQUARES["normal"],
-    ):
-        persistent.update(unstable)
-
+    # Do not turn every currently moving square into a persistent obstruction.
+    # The real origin and destination squares are commonly unstable during the
+    # same frame as a hand or paper obstruction. Persisting all unstable squares
+    # made legitimate moves remain masked even after the hand had settled.
+    _ = unstable
     persistent.update(broad_occlusion_squares(raw_scores))
     persistent = {
         square
@@ -145,7 +143,7 @@ def filter_change_scores(
     raw_scores: dict[chess.Square, float],
     unstable: frozenset[chess.Square],
 ) -> dict[chess.Square, float]:
-    """Mask obstructions so they cannot be ranked as a chess move."""
+    """Mask obstructions without hiding a real move after it settles."""
     blocked = update_persistent_occlusion(raw_scores, unstable)
     masked = set(unstable).union(blocked)
     filtered = {
