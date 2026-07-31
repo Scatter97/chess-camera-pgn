@@ -5,5 +5,5 @@ if not exist ".venv\Scripts\python.exe" (
     .venv\Scripts\python.exe -m pip install --upgrade pip
     .venv\Scripts\python.exe -m pip install -r requirements.txt
 )
-.venv\Scripts\python.exe revision35.py %*
+.venv\Scripts\python.exe revision35_update.py %*
 pause
