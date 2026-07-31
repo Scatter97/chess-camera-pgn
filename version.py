@@ -1,0 +1,2 @@
+APP_VERSION = "0.36"
+VERSION_LABEL = f"Chess Camera {APP_VERSION}"
