@@ -6,6 +6,7 @@ import numpy as np
 import app
 import app_navigation as navigation
 import calibration_ui
+import camera_advanced
 import chess960_generator
 import game_history
 import game_session
@@ -110,6 +111,7 @@ def main() -> None:
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_ui.install(app)
+    camera_advanced.install(app, navigation)
     navigation.install_navigation_patches()
     game_session.install_consolidated_setup_ui()
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
