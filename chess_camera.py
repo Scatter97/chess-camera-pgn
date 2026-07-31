@@ -15,6 +15,7 @@ import local_detection_runtime
 import opening_explorer
 import pregame_ui
 import promotion_popup
+import review_ui_fix
 import ui_support as ui
 from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
@@ -176,6 +177,7 @@ def main() -> None:
     game_session.install_consolidated_setup_ui()
     promotion_popup.install(app)
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
+    review_ui_fix.install(app)
 
     while True:
         action = home_screen()
