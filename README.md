@@ -4,20 +4,51 @@
 
 Chess Camera records a normal physical chess game from one fixed camera and saves the moves as PGN. It can also record remaining clock time from either Lichess OCR or the built-in chess clock.
 
-Revision 35 is now the main version of the project.
+Revision 35 is the main version of the project.
 
 ## Main menu
 
-The app now opens on a main menu instead of immediately entering calibration or game setup.
+The app opens on a scalable feature grid instead of immediately entering calibration or game setup.
 
-Available options:
+Current feature cards:
 
-- **Start Recorded OTB Game**
+- **Start OTB Game**
 - **Game History**
+- **Chess960 Generator**
+- **Opening Explorer**
 - **Settings**
+- A reserved card for future features
 - **Exit**
 
-The main page also leaves room for more features later.
+The grid can be expanded or rearranged as new tools are added.
+
+## Chess960 generator
+
+The Chess960 generator creates one of the 960 legal starting positions and shows:
+
+- The position number
+- The full starting board
+- The White back-rank order
+- The FEN
+- Generate Another and Copy FEN controls
+
+It uses the same virtual-board and piece renderer as live play and Stockfish analysis.
+
+## Opening Explorer
+
+Opening Explorer uses the `python-chess` Polyglot opening-book integration through `chess.polyglot`.
+
+Choose a local Polyglot `.bin` book, then click one of the displayed weighted moves to continue exploring the position. The explorer includes:
+
+- The same virtual-board and piece renderer used elsewhere in the app
+- Weighted book moves and percentages
+- Clickable move selection
+- Back Move
+- Reset
+- Current FEN
+- A saved opening-book path in `camera_config.json`
+
+You can place a `.bin` file inside `books/` for automatic detection, or choose one from another folder. No opening-book database is bundled with Chess Camera.
 
 ## Starting a recorded game
 
@@ -36,6 +67,8 @@ After calibration, the game-setup page lets you configure:
 - Camera orientation
 - Board profiles and guided move training
 - Accuracy Boost
+
+When a player or event text box is selected, an **X** appears inside that active field to clear it.
 
 Press **Back** or **Esc** on the initial setup page to return to the main menu.
 
@@ -143,6 +176,7 @@ The app stores data locally in files and folders such as:
 
 - `camera_config.json`
 - `board_profiles/`
+- `books/`
 - `games/`
 
 Camera video is not uploaded or saved by the learning system.
