@@ -89,6 +89,13 @@ def install(target: ModuleType) -> None:
         board = state.board
         if board is None:
             return filtered
+
+        # Once the entire board is stable, pass every stable change through.
+        # This allows illegal positions and extra displaced pieces to reach the
+        # normal illegal-move recovery logic instead of being hidden forever.
+        if not state.current_unstable:
+            return filtered
+
         if stable_legal_move_visible(
             board,
             filtered,
