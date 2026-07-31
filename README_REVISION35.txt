@@ -1,19 +1,24 @@
-Chess Camera Revision 35 overlay
+Chess Camera Rev. 35 (Main Menu Update)
 
-This package is installed on top of Revision 34.
+Revision 35 is now the main version of Chess Camera rather than an overlay.
 
-1. Download and extract Revision 34.
-2. Copy all files from this ZIP into the Revision 34 project folder.
-3. Windows: run run_revision35_windows.bat
-   Ubuntu: run ./run_revision35_ubuntu.sh
-   macOS: run ./run_revision35_mac.command
-
-Revision 35 additions:
-- Main page before calibration/settings.
-- Start Recorded OTB Game button.
-- Game History with result, ending, move count, time control, date, Stockfish review, and both accuracies.
+Main additions:
+- Main menu before calibration and game setup.
+- Start Recorded OTB Game, Game History, Settings, and Exit.
+- Fresh board calibration for the first OTB game after each app launch.
+- Reuse the current calibration for rematches and later games in the same session.
+- Game History with result, ending method, move count, time control, date, event, both accuracies, Stockfish review, Copy PGN, and confirmed deletion.
+- Settings page with a file picker for choosing a trusted UCI engine.
 - Board Options menu containing Rename preset and Reset training.
-- New board creation asks for a board name.
-- Smaller icon-only swap-sides control.
+- New board creation asks for the board name.
+- Smaller icon-only Swap sides control.
+- Back and Esc return from initial game setup to the main menu.
+- Rematch keeps players, event, and time control while allowing further editing.
+- Post-game evaluation bar moved to the left side of the board.
 
-Revision 34 remains unchanged underneath, including camera detection, clocks, PGN recording, and Stockfish review.
+Launchers:
+- Windows: run_windows.bat
+- Ubuntu: ./run_ubuntu.sh
+- macOS: ./run_mac.command
+
+The Revision 35-specific launchers remain available and open the same current build.
