@@ -17,6 +17,15 @@ from pregame_ui import Button
 from version import APP_VERSION, VERSION_LABEL
 
 
+CAMERA_CONFIG_KEYS = (
+    "camera_index",
+    "camera_name",
+    "detection_fps",
+    "detection_resolution",
+    "camera_debug_overlay",
+)
+
+
 def home_screen() -> str:
     """Show a scalable feature grid with room for future tools."""
     window = f"Chess Camera {APP_VERSION}"
@@ -107,11 +116,32 @@ def home_screen() -> str:
             return "exit"
 
 
+def install_camera_config_persistence() -> None:
+    """Keep camera settings when the legacy config writer saves game options."""
+    original_save = app.save_config
+
+    def save_with_camera_settings(*args: object, **kwargs: object) -> None:
+        before = camera_advanced.load_config(app.CONFIG_PATH)
+        camera_values = {
+            key: before[key]
+            for key in CAMERA_CONFIG_KEYS
+            if key in before
+        }
+        original_save(*args, **kwargs)
+        if camera_values:
+            after = camera_advanced.load_config(app.CONFIG_PATH)
+            after.update(camera_values)
+            camera_advanced.save_config(app.CONFIG_PATH, after)
+
+    app.save_config = save_with_camera_settings
+
+
 def main() -> None:
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     calibration_ui.install(app)
     camera_advanced.install(app, navigation)
+    install_camera_config_persistence()
     navigation.install_navigation_patches()
     game_session.install_consolidated_setup_ui()
     app.draw_evaluation_bar = game_history.draw_evaluation_bar_left
