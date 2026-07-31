@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.36.3
+
+Patch release.
+
+- Added a guided board and phone-screen calibration interface.
+- Added a dedicated calibration layout with a scaled camera preview, corner progress, numbered markers, Undo, Reset, Review, and Cancel controls.
+- Added automatic source-coordinate mapping so calibration points remain accurate even when the preview is resized.
+- Added a corrected perspective preview before calibration is confirmed.
+- Added basic geometry validation for crossed, tiny, extremely narrow, or overlapping corner selections.
+- Added an optional calibration debug panel showing incoming resolution, camera-reported FPS, and OpenCV backend.
+- Kept the original calibration functions available as implementation fallback while installing the new interface at app startup.
+
 ## 0.36.2
 
 Patch release.
