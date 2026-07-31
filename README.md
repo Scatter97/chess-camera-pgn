@@ -423,3 +423,9 @@ See `VERSIONING.md` for the release checklist.
 ## Release history
 
 Older revision-era development details remain available in Git history. Current releases and user-facing changes are summarized in `CHANGELOG.md`.
+
+## License
+
+Copyright © 2026 Joshua Wang. All rights reserved.
+
+No permission is granted to use, copy, modify, distribute, sublicense, sell, or create derivative works from this source code without prior written permission from the copyright holder.
