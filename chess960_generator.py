@@ -6,6 +6,7 @@ import chess
 import cv2
 import numpy as np
 
+import app
 import pregame_ui
 import revision35 as base
 import revision35_update as update
@@ -20,78 +21,10 @@ def _new_position() -> tuple[int, chess.Board]:
     return position_number, chess.Board.from_chess960_pos(position_number)
 
 
-def _piece_label(piece: chess.Piece) -> str:
-    return piece.symbol().upper()
-
-
 def _render_board(board: chess.Board, size: int = 560) -> np.ndarray:
-    square_size = size // 8
-    board_size = square_size * 8
-    image = np.zeros((board_size, board_size, 3), dtype=np.uint8)
-
-    light = (210, 220, 225)
-    dark = (95, 120, 135)
-    white_piece = (245, 245, 245)
-    black_piece = (35, 38, 44)
-
-    for display_rank in range(8):
-        rank = 7 - display_rank
-        for file_index in range(8):
-            x1 = file_index * square_size
-            y1 = display_rank * square_size
-            x2 = x1 + square_size
-            y2 = y1 + square_size
-            color = light if (file_index + rank) % 2 else dark
-            cv2.rectangle(image, (x1, y1), (x2, y2), color, -1)
-
-            square = chess.square(file_index, rank)
-            piece = board.piece_at(square)
-            if piece is None:
-                continue
-
-            label = _piece_label(piece)
-            scale = 1.25
-            thickness = 3
-            (text_width, text_height), _ = cv2.getTextSize(
-                label,
-                cv2.FONT_HERSHEY_SIMPLEX,
-                scale,
-                thickness,
-            )
-            text_x = x1 + (square_size - text_width) // 2
-            text_y = y1 + (square_size + text_height) // 2
-            text_color = white_piece if piece.color == chess.WHITE else black_piece
-            outline = black_piece if piece.color == chess.WHITE else white_piece
-            cv2.putText(
-                image,
-                label,
-                (text_x, text_y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                scale,
-                outline,
-                thickness + 3,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                image,
-                label,
-                (text_x, text_y),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                scale,
-                text_color,
-                thickness,
-                cv2.LINE_AA,
-            )
-
-    for file_index, file_name in enumerate("abcdefgh"):
-        base._put(
-            image,
-            file_name,
-            (file_index * square_size + 5, board_size - 7),
-            (55, 60, 68),
-            0.35,
-        )
-    return image
+    """Use the same piece artwork as live play and Stockfish analysis."""
+    rendered = app.render_virtual_board(board)
+    return cv2.resize(rendered, (size, size), interpolation=cv2.INTER_AREA)
 
 
 def show_chess960_generator() -> None:
