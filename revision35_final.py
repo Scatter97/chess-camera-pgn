@@ -74,6 +74,9 @@ def install_consolidated_setup_ui() -> None:
 
     def render(*args: object, **kwargs: object):
         view, buttons = pregame_ui.render_setup_screen(*args, **kwargs)
+        focused_field = kwargs.get("focused_field")
+        if focused_field is None and len(args) >= 2:
+            focused_field = args[1]
 
         buttons = [
             button
@@ -104,14 +107,16 @@ def install_consolidated_setup_ui() -> None:
             tipLength=0.30,
         )
 
-        clear_buttons = [
-            Button("clear_white_name", "CLEAR", 412, 130, 48, 28),
-            Button("clear_black_name", "CLEAR", 412, 204, 48, 28),
-            Button("clear_event_name", "CLEAR", 535, 278, 55, 28),
-        ]
-        buttons.extend(clear_buttons)
-        for button in clear_buttons:
-            pregame_ui.draw_button(view, button)
+        clear_button: Button | None = None
+        if focused_field == "white":
+            clear_button = Button("clear_white_name", "X", 375, 130, 30, 28)
+        elif focused_field == "black":
+            clear_button = Button("clear_black_name", "X", 375, 204, 30, 28)
+        elif focused_field == "event":
+            clear_button = Button("clear_event_name", "X", 495, 278, 30, 28)
+        if clear_button is not None:
+            buttons.append(clear_button)
+            pregame_ui.draw_button(view, clear_button)
 
         cv2.rectangle(view, (145, 767), (540, 820), (28, 31, 37), -1)
         options = Button("board_options", "Board options", 155, 772, 375, 42)
@@ -130,6 +135,9 @@ def install_consolidated_setup_ui() -> None:
         return view, buttons
 
     def clicked(buttons: list[Button], x: int, y: int) -> str | None:
+        for button in buttons:
+            if button.action.startswith("clear_") and button.contains(x, y):
+                return button.action
         action = pregame_ui.clicked_action(buttons, x, y)
         if action == "board_options":
             return board_options_menu()
