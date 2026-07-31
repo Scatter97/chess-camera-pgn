@@ -106,6 +106,7 @@ def home_screen() -> str:
 
 
 def main() -> None:
+    ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
     navigation.install_navigation_patches()
     game_session.install_consolidated_setup_ui()
