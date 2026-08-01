@@ -77,12 +77,25 @@ def test_library_root_and_downloaded_opening_activation(tmp_path: Path) -> None:
     package.mkdir(parents=True)
     book = package / "lichess_opening_names.bin"
     book.write_bytes(b"book")
+    (package / "package.json").write_text("{}", encoding="utf-8")
 
     assert content_library.activate_downloaded_opening(config) is True
     saved = json.loads(config.read_text(encoding="utf-8"))
     assert Path(saved[content_library.CONTENT_STORAGE_KEY]) == root.resolve()
     assert saved[content_library.OPENING_BOOK_MODE_KEY] == "downloaded"
     assert Path(saved[content_library.OPENING_BOOK_PATH_KEY]) == book
+
+
+def test_incomplete_tablebase_package_is_not_activated(tmp_path: Path) -> None:
+    config = tmp_path / "camera_config.json"
+    content_library.set_library_root(config, tmp_path / "data")
+    package = content_library.tablebase_package_directory(config)
+    package.mkdir(parents=True)
+    (package / "KQvK.rtbw").write_bytes(b"incomplete")
+    (package / "KQvK.rtbz").write_bytes(b"incomplete")
+
+    assert content_library.downloaded_tablebase_directory(config) is None
+    assert content_library.activate_downloaded_tablebase(config) is False
 
 
 def test_download_source_verifies_pinned_git_blob(
@@ -110,12 +123,13 @@ def test_download_source_verifies_pinned_git_blob(
     assert actual_sha256 == hashlib.sha256(data).hexdigest()
 
 
-def test_tablebase_index_only_accepts_expected_extension(monkeypatch) -> None:
+def test_tablebase_index_rejects_nested_and_unexpected_links(monkeypatch) -> None:
     url = content_library.SYZYGY_WDL_INDEX
     html = b'''<html><body>
         <a href="KQvK.rtbw">KQvK</a>
         <a href="KRvK.rtbw">KRvK</a>
         <a href="../escape.rtbw">escape</a>
+        <a href="folder/KPvK.rtbw">nested</a>
         <a href="KQvK.rtbz">wrong extension</a>
         <a href="notes.txt">notes</a>
     </body></html>'''
@@ -129,7 +143,6 @@ def test_tablebase_index_only_accepts_expected_extension(monkeypatch) -> None:
     assert content_library._index_filenames(url, ".rtbw") == [
         "KQvK.rtbw",
         "KRvK.rtbw",
-        "escape.rtbw",
     ]
 
 
