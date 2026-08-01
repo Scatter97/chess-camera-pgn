@@ -60,7 +60,9 @@ def test_corrected_move_resumes_with_opponents_clock_running() -> None:
 def test_release_startup_installs_completed_reliability_features() -> None:
     startup = Path("chess_camera.py").read_text(encoding="utf-8")
 
-    assert "runtime_0397_patch.install(app)" in startup
+    # The multi-move runtime installs the reliability patch first, then adds
+    # recovery before the normal illegal-position flow.
+    assert "runtime_multi_move_patch.install(app)" in startup
     assert "training_settings.install(app, navigation)" in startup
     assert "piece_theme_system.install(app)" in startup
     assert "feature_settings.install(app, navigation)" in startup
