@@ -151,4 +151,4 @@ def test_release_wires_data_manager_and_version() -> None:
     version = Path("version.py").read_text(encoding="utf-8")
 
     assert "content_manager_ui.install(app, navigation)" in startup
-    assert 'APP_VERSION = "0.41"' in version
+    assert 'APP_VERSION = "0.41.1"' in version
