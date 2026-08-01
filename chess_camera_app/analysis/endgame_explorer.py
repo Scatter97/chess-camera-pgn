@@ -101,27 +101,21 @@ def _position_is_covered_candidate(board: chess.Board) -> tuple[bool, str | None
     return True, None
 
 
-def _tablebase_move(entry: object) -> TablebaseMove | None:
-    if isinstance(entry, tuple) and len(entry) >= 3 and isinstance(entry[0], chess.Move):
-        return TablebaseMove(entry[0], int(entry[1]), int(entry[2]))
-
-    move = getattr(entry, "move", None)
-    wdl = getattr(entry, "wdl", None)
-    dtz = getattr(entry, "dtz", None)
-    if isinstance(move, chess.Move) and isinstance(wdl, int) and isinstance(dtz, int):
-        return TablebaseMove(move, wdl, dtz)
-    return None
-
-
 def probe_position(tablebase: object, board: chess.Board) -> TablebaseProbe:
-    """Probe one covered position and normalize python-chess root results."""
+    """Probe one position using only supported python-chess Syzygy APIs."""
     wdl = int(tablebase.probe_wdl(board))  # type: ignore[attr-defined]
     dtz = int(tablebase.probe_dtz(board))  # type: ignore[attr-defined]
-    moves = [
-        move
-        for entry in tablebase.probe_root(board)  # type: ignore[attr-defined]
-        if (move := _tablebase_move(entry)) is not None
-    ]
+    moves: list[TablebaseMove] = []
+    for move in board.legal_moves:
+        child = board.copy(stack=False)
+        child.push(move)
+        # After a move it is the opponent's turn, so invert WDL/DTZ back to
+        # the current player's perspective.
+        moves.append(TablebaseMove(
+            move,
+            -int(tablebase.probe_wdl(child)),  # type: ignore[attr-defined]
+            -int(tablebase.probe_dtz(child)),  # type: ignore[attr-defined]
+        ))
     moves.sort(key=lambda move: (-move.wdl, abs(move.dtz), move.move.uci()))
     return TablebaseProbe(wdl, dtz, tuple(moves))
 
@@ -138,8 +132,10 @@ def _probe_directory(
     try:
         with chess.syzygy.open_tablebase(str(directory)) as tablebase:
             return probe_position(tablebase, board), None
-    except Exception as error:
-        return None, f"This position is not covered by the active tablebase: {error}"
+    except chess.syzygy.MissingTableError:
+        return None, "The active folder does not contain the Syzygy files for this position."
+    except (OSError, ValueError) as error:
+        return None, f"Could not read the active tablebase: {error}"
 
 
 def _wdl_label(wdl: int) -> str:
