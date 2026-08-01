@@ -4,6 +4,7 @@ import chess
 import pytest
 
 from chess_camera_app.game.bot_engine import choose_move
+from chess_camera_app.game import bot_games
 
 
 def test_bot_requires_an_existing_engine() -> None:
@@ -17,3 +18,18 @@ def test_bot_rejects_finished_games(tmp_path: Path) -> None:
     board = chess.Board("7k/5Q2/7K/8/8/8/8/8 b - - 0 1")
     with pytest.raises(ValueError):
         choose_move(board, engine)
+
+
+def test_bot_game_save_writes_a_history_pgn(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(bot_games.app, "OUTPUT_PATH", tmp_path / "latest_game.pgn")
+    monkeypatch.setattr(bot_games.navigation, "GAMES_DIR", tmp_path / "games")
+    board = chess.Board()
+    board.push_san("e4")
+
+    message = bot_games._save_bot_game(board, otb=False)
+
+    assert message.startswith("Saved bot_game_")
+    assert (tmp_path / "latest_game.pgn").is_file()
+    saved = list((tmp_path / "games").glob("bot_game_*.pgn"))
+    assert len(saved) == 1
+    assert "Virtual Bot Game" in saved[0].read_text(encoding="utf-8")
