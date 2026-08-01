@@ -1,34 +1,29 @@
 # Chess Camera
 
-**Current test release: 0.40**
+**Current test release: 0.41**
 
-Chess Camera watches a normal physical chess game through one fixed camera, records legal moves, tracks clock information, and saves the result as a PGN file. It also includes local game history, Stockfish review, Chess960 generation, an opening explorer, board training, illegal-move correction, manual board synchronization, piece themes, and move sounds.
+Chess Camera watches a physical over-the-board chess game through a fixed camera, recognizes legal moves, tracks optional clock information, and saves the game as PGN. It also includes game history, local Stockfish review, Chess960 generation, Opening Explorer, Endgame Explorer, board training, illegal-move correction, manual board synchronization, piece themes, move sounds, and optional downloadable chess data.
 
-The app is designed for Windows, Debian-based Linux distributions, and macOS. Camera processing, saved games, board training, opening books, piece packs, sound packs, and engine analysis stay on the local computer.
+The application is designed for Windows, Debian-based Linux distributions, and macOS. Camera processing, games, training data, engines, opening books, and tablebases remain on the local computer.
 
 ## Main features
 
-- Record over-the-board chess games from a camera.
-- Save legal moves, player names, event information, results, and clock times as PGN.
+- Record physical chess games from a camera and save legal PGN moves.
 - Use Lichess clock OCR or the configurable built-in chess clock.
-- Use optional 64-Square Local Detection to ignore unrelated board movement.
-- Set a confidence threshold for automatic move approval.
-- Correct a legal move that was mistaken for an illegal position.
-- Manually synchronize the virtual board with the physical board during a game.
-- Restore yellow move highlights over the calibrated camera preview.
-- Use the included Classic Vector piece set or custom transparent PNG piece packs.
-- Use the included Classic Wood and Soft Digital sound packs or custom WAV packs.
-- Review saved games with a local UCI engine such as Stockfish.
-- Browse game history, copy PGNs, and delete games with confirmation.
-- Generate any of the 960 legal Chess960 starting positions.
-- Explore opening moves using the included CC0-derived book or another Polyglot `.bin` book.
-- Explore covered endgame positions with a local Syzygy tablebase folder.
-- Save separate board profiles for different boards, pieces, camera positions, and lighting conditions.
-- Improve recognition with guided move training and confirmed-move learning.
+- Use Normal, Fast, Bullet, Accuracy Boost, and optional 64-square local detection.
+- Configure a confidence threshold for automatic move approval.
+- Correct a legal move mistaken for an illegal position.
+- Manually synchronize the virtual board through one or more legal moves.
+- Save board profiles and improve recognition with guided training.
+- Review games with a separately installed Stockfish or another UCI engine.
+- Browse game history, copy PGNs, and delete saved games with confirmation.
+- Generate Chess960 starting positions.
+- Explore built-in, downloaded, or custom Polyglot opening books.
+- Explore downloaded or custom local Syzygy tablebases.
+- Download optional opening and endgame libraries after installation.
+- Use bundled or custom piece and sound packs.
 
-## Current main menu
-
-Chess Camera opens on a scalable feature-card menu:
+## Main menu
 
 - **Start OTB Game**
 - **Game History**
@@ -36,163 +31,167 @@ Chess Camera opens on a scalable feature-card menu:
 - **Opening Explorer**
 - **Endgame Explorer**
 - **Settings**
-- A reserved card for future features
 - **Exit**
 
-The displayed version comes from `version.py`, which is the single source of truth for the app version.
+The displayed version is read from `version.py`.
 
-## Three-step recording workflow
+## Recording workflow
 
 ### 1. Calibrate
 
-For the first recorded game after each app launch, Chess Camera asks for fresh board calibration. Click the exact four corners of the 8×8 playing grid in this order:
+For the first recorded game after each launch, click the four board corners in this order:
 
 1. Image top-left
 2. Image top-right
 3. Image bottom-right
 4. Image bottom-left
 
-When Lichess OCR is used, also click the four visible corners of the phone screen. Click the lit display edges rather than the phone case.
+When clock OCR is enabled, also calibrate the visible phone or clock display. Later games in the same session can reuse the current calibration.
 
-Additional games and rematches in the same app session reuse the current calibration. Manual recalibration remains available from game setup.
+### 2. Configure
 
-### 2. Configure the game
-
-The game-setup screen includes clickable controls for:
-
-- White and Black player names
-- Event name
-- Lichess OCR or built-in clock
-- Shared or separate starting times and increments
-- Pinned time-control presets
-- Normal, Fast, or Bullet detection
-- Manual or automatic move confirmation
-- Camera-controlled or player-controlled built-in clock switching
-- Which OCR display belongs to White
-- Camera placement on any side of the board
-- Board and phone recalibration
-- Optional three-frame Accuracy Boost
-- A labeled 64-square calibration check
-- Board profiles and guided move training
-- Learning on or off
-
-Use the compact two-arrow button to swap the White and Black player names. This changes the PGN player assignment only; it does not change camera orientation or clock mapping.
-
-Press **Back** or **Esc** on the initial setup page to return to the main menu.
+Game setup includes player names, event name, clock source, time controls, detection mode, camera orientation, board profile, learning, calibration tools, Accuracy Boost, and move-confirmation behavior.
 
 ### 3. Play and save
 
-Click **Start Game** after setup. The match screen shows:
+The game screen shows the virtual board, player names, clocks, recorded moves, detection status, camera preview, stability information, and controls for correction, board synchronization, clocks, draws, resignation, and game completion.
 
-- The live virtual board
-- Player names
-- Clock information
-- Recorded move list
-- Detection status
-- Yellow origin and destination highlights over the camera preview
-- A separate board-stability strip above the camera preview
-- Controls for corrections, manual board synchronization, clock adjustments, draw claims, resignations, and game completion
+Games are saved under `games/` as `latest_game.pgn` and timestamped PGN files.
 
-When the game finishes, Chess Camera saves the PGN in `games/` and offers:
+## Detection and correction
 
-- **Rematch** — keeps the players, event, and time control while allowing edits before the next game
-- **Main Menu** — returns to the feature grid
+### Detection modes
 
-## Detection modes
+- **Normal** uses the longest stability delay.
+- **Fast** reduces the delay while keeping normal validation.
+- **Bullet (Beta)** uses the shortest delay and is more sensitive to hands, lighting, reflections, and camera movement.
+- **Accuracy Boost** compares multiple stable frames before accepting a move.
+- **64-Square Local Detection (Beta)** analyzes local square regions and can ignore unrelated movement or broad occlusion.
 
-### Normal
+### Confidence auto-approval
 
-Uses the longest stability delay and is intended for reliable general recording.
+Open **Settings → Advanced Detection** to enable confidence-based approval and choose a threshold from 50% to 99%. Moves below the threshold remain available for manual confirmation.
 
-### Fast
+### Detection wrong
 
-Uses a shorter stability delay for quicker games while keeping more checking than Bullet mode.
+Use **Detection wrong** immediately after an incorrect automatic legal move. The app removes the move, restores its training state, records rejection evidence when enabled, and presents alternatives.
 
-### Bullet (Beta)
+### Illegal-move recovery
 
-Uses the shortest delay and is experimental. It is more sensitive to camera movement, hands, reflections, and unusual pieces.
+When no legal move explains the physical position, the built-in clock pauses. The player can restore the previous position or open **Move Was Legal – Fix Board**, drag the virtual board to exactly one legal move, validate it, update the PGN, and resume the correct clock.
 
-The green stability bar above the camera image is a stillness timer, not an accuracy score.
+### Manual board synchronization
 
-## 64-Square Local Detection
+Use **Edit Virtual Board** to add one or more legal moves when the physical and virtual boards no longer match. The editor supports save, undo, reset, and cancel. Saved moves update the PGN and reset the camera reference.
 
-Open **Settings → Experimental Features** and turn **64-SQUARE BETA** on or off.
+## Data and Libraries — new in 0.41
 
-The feature divides the calibrated board into 64 local regions. It can ignore moving or blocked regions that are unrelated to a complete legal move. Large dense changes, such as paper covering half the board, are treated as obstructions and are prevented from becoming fake moves.
+Open:
 
-Sensitivity choices:
+```text
+Settings
+└── Data and Libraries
+```
 
-- **Low** — strictest evidence requirements and strongest obstruction rejection
-- **Normal** — balanced move detection and false-positive protection
-- **High** — accepts weaker visual evidence but may be more affected by shadows or hands
+The manager installs optional datasets after the app is installed, so large files are not included in every installer.
 
-## Confidence-based automatic approval
+It supports:
 
-Open **Settings → Advanced Detection** to enable confidence-based auto-approval and choose a threshold from 50% to 99%.
+- Resumable downloads using `.part` files and HTTP Range requests
+- Cancellation while preserving resumable data
+- Configurable storage location
+- Activate, verify, update, and remove controls
+- Local package metadata and SHA-256 checksums
+- Offline use after successful installation
 
-- Legal moves at or above the selected confidence are accepted automatically.
-- Lower-confidence moves remain available for manual approval.
-- The advanced setting overrides the ordinary pregame Manual/Automatic choice while enabled.
+### Expanded opening package
 
-## Accuracy Boost
+The optional opening package downloads the five ECO TSV files from `lichess-org/chess-openings` at pinned commit:
 
-Accuracy Boost compares three stable full-resolution frames and requires agreement before accepting a move. It can compensate for small camera shifts and brightness changes. Accuracy Boost is intended for Normal and Fast modes and is disabled in Bullet mode.
+```text
+51b886249b9e418498d25b6e39b926c3de99c29a
+```
 
-## Automatic detection correction
+Each source file is checked against its pinned Git blob object ID before Chess Camera converts the PGN lines into a local Polyglot book. The source dataset is CC0.
 
-When automatic confirmation records the wrong legal move, use **Detection wrong** before another move is recorded.
+Opening Explorer can use:
 
-Chess Camera can remove the incorrect move, preserve the recorded move time, show alternative candidates, save negative training feedback, and return to automatic confirmation for the following move.
+- The included small book
+- The downloaded expanded opening-name book
+- A user-selected custom Polyglot `.bin` book
 
-## Illegal-move recovery
+The generated weights describe how often position/move pairs occur in the imported theory lines. They are not live online win-rate statistics.
 
-When the camera detects an illegal physical position, the warning pauses the built-in clock. The warning offers:
+### Syzygy 3/4/5-piece package
 
-- **Restored – Resume** — use after physically restoring the last recorded position
-- **Move Was Legal – Fix Board** — drag the virtual board to the actual legal position and continue
+The optional Syzygy package downloads standard 3/4/5-piece WDL and DTZ data from the Lichess tablebase mirror. It is approximately 939 MB and requires at least 1.25 GB of free storage before downloading.
 
-The correction editor validates exactly one legal move, updates the PGN, applies the correct clock switch and increment, and resumes the game.
+Endgame Explorer can use:
 
-## Manual virtual-board synchronization
+- The downloaded 3/4/5-piece package
+- A custom Syzygy folder, including larger six- or seven-piece collections
 
-Use **Edit Virtual Board** from the live game when the physical board and virtual board no longer match.
+The downloaded package gives exact local results for covered positions with five or fewer pieces. No position is sent online.
 
-The editor pauses detection and the built-in clock. Drag one or more legal moves, then use:
+The tablebase manager downloads through HTTPS, records a local SHA-256 checksum for every file, and verifies that `python-chess` can load the installed directory. The mirror does not provide a complete signed SHA-256 catalog through this downloader, so the initial local checksums detect later corruption or modification but are not claimed as independent source-hash verification.
 
-- **Save Board Sync**
-- **Undo Edit**
-- **Reset**
-- **Cancel**
+Detailed architecture, storage, integrity notes, and the hands-on test checklist are in [`CONTENT_LIBRARY.md`](CONTENT_LIBRARY.md).
 
-Saving records the selected legal move sequence, updates the PGN and virtual position, refreshes the camera reference, and resumes the correct player’s clock.
+## Opening Explorer
 
-## Piece themes and move sounds
+Opening Explorer displays weighted legal book moves, allows moves to be played directly, and supports reset, back move, and current FEN. Buttons allow switching among built-in, downloaded, and custom books or opening Data Manager directly.
 
-Open **Settings → Board Appearance and Sounds** to select the piece pack, sound pack, sound status, and camera move highlights.
+## Endgame Explorer
 
-### Included piece pack
+Endgame Explorer loads legal FEN positions, probes local Syzygy data, displays exact WDL and DTZ values, and provides clickable root moves. Positions with castling rights, invalid positions, unsupported piece counts, and uncovered material are reported safely.
 
-- **Classic Vector** — an original Staunton-inspired transparent PNG set
+## Game history and engine review
 
-### Custom piece packs
+Game History shows players, result, finish reason, move count, time control, date, event, and available accuracy values.
 
-Create a folder under `piece_packs/` containing these twelve transparent PNG files:
+The review screen can show estimated accuracy, average centipawn loss, classifications, engine evaluation, suggested moves and arrows, a clickable scrollable move list, evaluation bar, and the virtual position at each move.
+
+Stockfish is not bundled. Select a trusted UCI engine executable through Settings.
+
+## Clocks
+
+### Lichess OCR
+
+Clock OCR reads a calibrated phone or clock display. OCR is read-only and may leave a PGN clock value unknown when confidence is insufficient.
+
+### Built-in clock
+
+The built-in clock supports shared or asymmetric starting times, separate increments, presets, manual or camera-controlled switching, midgame adjustment, undo, correction pauses, and timeout results.
+
+## Board profiles and training
+
+Board profiles can store calibration, camera orientation, clock mapping, learned move signatures, rejected examples, and local camera-noise information.
+
+Open **Settings → Advanced Board Training** to control learning, undo cleanup, rejected samples, and training reset. Training stores compact measurements rather than video.
+
+## Appearance and sounds
+
+Open **Settings → Board Appearance and Sounds**.
+
+### Piece packs
+
+The included **Classic Vector** pack is used on live, correction, synchronization, history, and review boards.
+
+A custom pack under `piece_packs/<pack name>/` should contain:
 
 ```text
 wK.png  wQ.png  wR.png  wB.png  wN.png  wP.png
 bK.png  bQ.png  bR.png  bB.png  bN.png  bP.png
 ```
 
-Images around 128×128 pixels are recommended.
+### Sound packs
 
-### Included sound packs
+Included packs:
 
-- **Classic Wood**
-- **Soft Digital**
+- Classic Wood
+- Soft Digital
 
-### Custom sound packs
-
-Create a folder under `sound_packs/` containing WAV files named:
+A custom folder under `sound_packs/<pack name>/` may contain:
 
 ```text
 move.wav
@@ -202,171 +201,23 @@ castle.wav
 promotion.wav
 ```
 
-Only `move.wav` is required. Missing event sounds fall back to `move.wav`.
-
-## Clock options
-
-### Lichess OCR
-
-Chess Camera reads the two displays from a phone running a Lichess clock. OCR is read-only; Lichess remains responsible for its clock and flag behavior.
-
-### Built-in clock
-
-The built-in clock supports shared or separate time controls, increments, pinned presets, camera-controlled or keyboard-controlled switching, midgame adjustments, and automatic timeout results.
-
-## Board profiles and training
-
-Each board profile can store:
-
-- Board and phone calibration
-- Camera orientation and clock-side mapping
-- Learned move signatures
-- Rejected detection examples
-- Per-square camera-noise measurements
-
-Use **Settings → Advanced Board Training** to manage learning, undo cleanup, rejected examples, sample counts, and training-data clearing.
-
-Training data is stored as compact local JSON measurements. Camera video is not uploaded or saved by the learning system.
-
-## Game History and Stockfish review
-
-Game History displays the players, result, finish reason, move count, time control, date, event, and available accuracy information.
-
-The review screen includes estimated accuracy, average centipawn loss, move classifications, engine evaluation, Stockfish’s suggested move, a suggested-move arrow, a clickable and scrollable move list, an evaluation bar, and a virtual board that follows the selected move.
-
-Stockfish is optional and is not bundled. Open **Settings** and choose a trusted UCI-compatible engine executable.
-
-## Chess960 Generator
-
-The Chess960 Generator creates one of the 960 legal starting positions and shows the position number, board, back-rank order, FEN, and controls to generate another position or copy the FEN.
-
-## Opening Explorer
-
-Opening Explorer uses `python-chess` Polyglot support and includes a built-in CC0-derived opening source, automatic generation of `books/chess_camera_default.bin`, optional custom Polyglot books, weighted counts, clickable moves, reset, back move, and current FEN.
-
-### Endgame Explorer
-
-Endgame Explorer uses local Syzygy tablebase files already on your computer. Select a folder containing `.rtbw` and `.rtbz` files, load a legal FEN with up to seven pieces, and browse exact root moves. The explorer displays the result for the side to move and distance to zeroing move (DTZ). No chess positions are sent online.
-
-Tablebase files are intentionally not bundled because larger Syzygy sets require substantial disk space. The app reports when a position is outside the seven-piece limit, has castling rights, or is not covered by the selected files.
-
-## Prebuilt desktop packages
-
-The repository contains build definitions for three desktop package types. Generated binaries are uploaded as GitHub Actions artifacts rather than committed directly because PyInstaller dependencies are large and platform-specific.
-
-Open the repository’s **Actions** tab, select **Build desktop installers**, open a successful run, and download the matching artifact.
-
-### Windows EXE
-
-Expected artifact:
-
-```text
-ChessCamera-0.39.7-Windows-x64.zip
-```
-
-After extracting it, launch:
-
-```text
-ChessCamera.exe
-```
-
-`ChessCamera.exe` must remain beside its `_internal` folder. The full portable folder is included in the ZIP.
-
-### Debian/Ubuntu installer
-
-Expected artifact:
-
-```text
-chess-camera_0.39.7_amd64.deb
-```
-
-Install it with:
-
-```bash
-sudo apt install ./chess-camera_0.39.7_amd64.deb
-```
-
-It installs the application under `/opt/chess-camera`, adds the `chess-camera` command, and creates an application-menu shortcut.
-
-### macOS app and DMG
-
-Expected artifacts:
-
-```text
-ChessCamera-0.39.7-macOS.dmg
-ChessCamera-0.39.7-macOS-app.zip
-```
-
-The DMG contains:
-
-```text
-ChessCamera.app
-Applications shortcut
-```
-
-The automated build is ad-hoc signed. Public distribution without Gatekeeper warnings requires an Apple Developer ID signature and Apple notarization.
-
-## Building the packages yourself
-
-### Windows
-
-```text
-build_windows_exe.bat
-```
-
-Outputs:
-
-```text
-dist\ChessCamera\ChessCamera.exe
-release\ChessCamera-<version>-Windows-x64.zip
-```
-
-### Debian/Linux
-
-```bash
-chmod +x packaging/build_deb.sh
-./packaging/build_deb.sh
-```
-
-Output:
-
-```text
-release/chess-camera_<version>_<architecture>.deb
-```
-
-### macOS
-
-```bash
-chmod +x packaging/build_macos.sh
-./packaging/build_macos.sh
-```
-
-Outputs:
-
-```text
-dist/ChessCamera.app
-release/ChessCamera-<version>-macOS.dmg
-release/ChessCamera-<version>-macOS-app.zip
-```
-
-More details are in `packaging/README.md`.
+Only `move.wav` is required.
 
 ## Running from source
 
 ### Windows
 
-Install Python and Git, clone the repository, then double-click:
-
-```text
+```powershell
+git clone https://github.com/Scatter97/chess-camera-pgn.git
+cd chess-camera-pgn
 run_windows.bat
 ```
 
-### Ubuntu/Linux
+### Ubuntu/Debian
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-tk git
-
+sudo apt install -y python3 python3-venv python3-tk git
 git clone https://github.com/Scatter97/chess-camera-pgn.git
 cd chess-camera-pgn
 chmod +x run_ubuntu.sh
@@ -382,51 +233,88 @@ chmod +x run_mac.command
 ./run_mac.command
 ```
 
-## Packaged data locations
+## Prebuilt desktop packages
 
-Source checkouts keep generated data in the repository folder. Installed packages use writable user folders:
+GitHub Actions builds Windows, Debian, and macOS packages. Generated binaries are uploaded as workflow artifacts rather than committed.
+
+Expected 0.41 outputs:
+
+```text
+ChessCamera-0.41-Windows-x64.zip
+chess-camera_0.41_amd64.deb
+ChessCamera-0.41-macOS.dmg
+ChessCamera-0.41-macOS-app.zip
+```
+
+The macOS build is ad-hoc signed but not Apple-notarized.
+
+## Building packages
+
+### Windows
+
+```text
+build_windows_exe.bat
+```
+
+### Debian/Linux
+
+```bash
+chmod +x packaging/build_deb.sh
+./packaging/build_deb.sh
+```
+
+### macOS
+
+```bash
+chmod +x packaging/build_macos.sh
+./packaging/build_macos.sh
+```
+
+See `packaging/README.md` for package details.
+
+## Data locations
+
+Source checkouts store generated data in the repository folder. Packaged applications use:
 
 - Windows: `%LOCALAPPDATA%\ChessCamera`
 - Debian/Linux: `${XDG_DATA_HOME:-~/.local/share}/chess-camera`
 - macOS: `~/Library/Application Support/ChessCamera`
 
-These locations contain settings, games, profiles, generated books, custom piece packs, custom sound packs, and optional engines.
+The default optional library is under `content_library/` inside that location. Data Manager can point optional libraries to another drive; changing the location does not automatically move existing downloads.
 
-## Project structure
+## Important files
 
-Important files include:
-
-- `chess_camera.py` — main application entry point and feature menu
-- `app.py` — camera recording, calibration, clocks, move tracking, and review UI
-- `runtime_app_patch.py` — 0.39 reliability state-machine patch used by source runs
-- `runtime_paths.py` — writable data paths for packaged applications
-- `feature_settings.py` — advanced detection, appearance, and sound settings
-- `piece_theme_system.py` — piece-pack loading, bundled themes, and move sounds
-- `manual_board_sync.py` — live legal-move board synchronization editor
-- `app_navigation.py` — settings, rematches, navigation, clipboard, and engine selection
-- `game_session.py` — consolidated setup and recorded-game session flow
-- `game_history.py` — saved-game browser and review entry point
-- `chess960_generator.py` — Chess960 tool
-- `opening_explorer.py` — built-in and custom Polyglot explorer
-- `version.py` — current version
+- `chess_camera.py` — application entry point and main menu
+- `app.py` — camera game loop, clocks, move confirmation, and PGN recording
+- `chess_tracker.py` — square changes and legal-move ranking
+- `content_library.py` — package storage, downloads, resume, integrity, activation, and removal
+- `content_manager_ui.py` — in-app Data and Libraries interface
+- `opening_book_builder.py` — TSV/PGN/UCI to Polyglot conversion
+- `opening_explorer.py` — built-in, downloaded, and custom opening books
+- `endgame_explorer.py` — downloaded and custom local Syzygy probing
+- `runtime_paths.py` — writable package data folders
+- `feature_settings.py` — advanced detection and appearance settings
+- `game_history.py` and `game_analysis.py` — history and UCI-engine review
+- `manual_board_sync.py` and `illegal_correction.py` — correction tools
+- `version.py` — application version
 - `CHANGELOG.md` — release history
-- `build_windows_exe.bat` — Windows EXE/ZIP build
-- `packaging/ChessCamera.spec` — shared PyInstaller definition
-- `packaging/build_deb.sh` — Debian package build
-- `packaging/build_macos.sh` — `ChessCamera.app` and DMG build
-- `.github/workflows/build-installers.yml` — automated multi-platform package builds
+- `CONTENT_LIBRARY.md` — optional data architecture and test plan
+- `packaging/` — Windows, Debian, and macOS builds
 
 ## Current limitations
 
-- Physical camera behavior depends on lighting, camera position, board contrast, reflections, and piece shape.
+- Camera reliability depends on lighting, reflections, board contrast, camera angle, and piece shape.
 - Bullet and 64-square detection remain experimental.
-- Lichess OCR quality depends on phone-screen visibility and glare.
-- Stockfish analysis requires a separately installed UCI engine.
-- The macOS Actions package is not Apple-notarized.
-- Camera, OpenCV windows, audio, custom packs, and physical-board synchronization should be tested on each target operating system before public release.
+- OCR depends on phone-screen visibility and glare.
+- Stockfish requires a separate UCI engine.
+- Optional datasets require an internet connection for initial download.
+- The approximately 939 MB tablebase download and graphical progress flow require hands-on testing.
+- Changing the optional storage location does not move existing files automatically.
+- The macOS package is not notarized.
+- Camera, downloads, OpenCV windows, sound, custom packs, and physical synchronization should be tested on each target operating system before public release.
 
 ## License
 
 Copyright © 2026 Joshua Wang. All rights reserved.
 
-No permission is granted to use, copy, modify, distribute, sublicense, sell, or create derivative works from this source code without prior written permission from the copyright holder.
+No permission is granted to use, copy, modify, distribute, sublicense, sell, or create derivative works from this source code without prior written permission from the copyright holder. Third-party datasets retain their own licenses and notices.
