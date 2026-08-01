@@ -19,7 +19,7 @@ fi
 .venv-build/bin/python -m PyInstaller --noconfirm --clean packaging/ChessCamera.spec
 
 VERSION="$(.venv-build/bin/python -c 'from chess_camera_app.core.version import APP_VERSION; print(APP_VERSION)')"
-APP_PATH="dist/ChessCamera.app"
+APP_PATH="dist/Knightboard.app"
 if [[ ! -d "$APP_PATH" ]]; then
     echo "PyInstaller did not create $APP_PATH" >&2
     exit 1
@@ -32,12 +32,12 @@ codesign --deep --force --sign - "$APP_PATH"
 DMG_ROOT="build/dmg-root"
 rm -rf "$DMG_ROOT"
 mkdir -p "$DMG_ROOT"
-cp -R "$APP_PATH" "$DMG_ROOT/ChessCamera.app"
+cp -R "$APP_PATH" "$DMG_ROOT/Knightboard.app"
 ln -s /Applications "$DMG_ROOT/Applications"
 
-DMG_PATH="release/ChessCamera-${VERSION}-macOS.dmg"
+DMG_PATH="release/Knightboard-${VERSION}-macOS.dmg"
 hdiutil create \
-    -volname "Chess Camera" \
+    -volname "Knightboard" \
     -srcfolder "$DMG_ROOT" \
     -ov \
     -format UDZO \
@@ -45,7 +45,7 @@ hdiutil create \
 
 ditto -c -k --sequesterRsrc --keepParent \
     "$APP_PATH" \
-    "release/ChessCamera-${VERSION}-macOS-app.zip"
+    "release/Knightboard-${VERSION}-macOS-app.zip"
 
 echo "Built $APP_PATH"
 echo "Built $DMG_PATH"

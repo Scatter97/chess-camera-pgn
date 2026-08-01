@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 
 from chess_camera_app.game.builtin_clock import ClockSettings
+from chess_camera_app.ui import visual_system as visual
 
 
 SETUP_WIDTH = 1100
@@ -155,31 +156,21 @@ def button_text_scale(button: Button) -> float:
 
 def draw_button(image: np.ndarray, button: Button) -> None:
     if not button.enabled:
-        fill = (52, 55, 61)
-        border = (88, 91, 98)
-        text_color = (130, 130, 135)
+        fill = (42, 47, 56)
+        border = (66, 75, 91)
+        text_color = (128, 138, 153)
     elif button.active:
-        fill = (52, 132, 92)
-        border = (120, 255, 170)
-        text_color = (255, 255, 255)
+        fill = visual.ACCENT_DARK
+        border = visual.ACCENT
+        text_color = visual.TEXT
     else:
-        fill = (58, 63, 73)
-        border = (115, 125, 142)
-        text_color = (240, 240, 240)
+        fill = visual.SURFACE_RAISED
+        border = visual.BORDER
+        text_color = visual.TEXT
 
-    cv2.rectangle(
-        image,
-        (button.x, button.y),
-        (button.x + button.width, button.y + button.height),
-        fill,
-        -1,
-    )
-    cv2.rectangle(
-        image,
-        (button.x, button.y),
-        (button.x + button.width, button.y + button.height),
-        border,
-        2,
+    visual.rounded_rect(
+        image, button.x, button.y, button.x + button.width, button.y + button.height,
+        fill, border, min(12, max(5, button.height // 4)), 2 if button.active else 1,
     )
     text_scale = button_text_scale(button)
     (text_width, text_height), _ = cv2.getTextSize(
@@ -417,24 +408,24 @@ def render_setup_screen(
     player_suggestions: tuple[str, ...] = (),
     event_suggestions: tuple[str, ...] = (),
 ) -> tuple[np.ndarray, list[Button]]:
-    view = np.zeros((SETUP_HEIGHT, SETUP_WIDTH, 3), dtype=np.uint8)
-    view[:] = (28, 31, 37)
+    view = visual.canvas(SETUP_HEIGHT, SETUP_WIDTH)
     buttons: list[Button] = []
 
-    draw_text(view, "Chess Camera Setup", (40, 45), (100, 220, 255), 0.94, 2)
-    draw_text(view, "1  Calibration", (610, 38), (145, 155, 170), 0.52)
-    draw_text(view, "2  Game settings", (755, 38), (120, 255, 170), 0.52)
-    draw_text(view, "3  Play", (940, 38), (145, 155, 170), 0.52)
-    cv2.line(view, (40, 63), (1060, 63), (75, 80, 90), 1)
+    visual.brand_header(view, "Game setup", "Step 2 of 3")
+    draw_text(view, "1  Calibration", (610, 104), visual.MUTED, 0.52)
+    draw_text(view, "2  Game settings", (755, 104), visual.ACCENT, 0.52)
+    draw_text(view, "3  Play", (940, 104), visual.MUTED, 0.52)
+    cv2.line(view, (40, 120), (1060, 120), visual.BORDER, 1)
 
-    draw_text(view, "Player information", (40, 96), (100, 220, 255), 0.68)
+    visual.card(view, 24, 132, 550, 337)
+    draw_text(view, "Player information", (40, 154), visual.ACCENT, 0.68)
     _text_field(
         view,
         buttons,
         "focus_white",
         "WHITE PLAYER",
         setup.white_name,
-        122,
+        166,
         focused_field == "white",
         370,
     )
@@ -444,7 +435,7 @@ def render_setup_screen(
         "focus_black",
         "BLACK PLAYER",
         setup.black_name,
-        196,
+        230,
         focused_field == "black",
         370,
     )
@@ -454,26 +445,26 @@ def render_setup_screen(
         "focus_event",
         "EVENT",
         setup.event_name,
-        270,
+        294,
         focused_field == "event",
     )
-    swap_button = Button("swap_players", "", 425, 139, 105, 72)
+    swap_button = Button("swap_players", "", 425, 183, 105, 72)
     buttons.append(swap_button)
     draw_button(view, swap_button)
     cv2.arrowedLine(
         view,
-        (455, 194),
-        (455, 154),
-        (120, 255, 170),
+        (455, 238),
+        (455, 198),
+        visual.ACCENT,
         4,
         cv2.LINE_AA,
         tipLength=0.30,
     )
     cv2.arrowedLine(
         view,
-        (500, 154),
-        (500, 194),
-        (120, 220, 255),
+        (500, 198),
+        (500, 238),
+        visual.SUCCESS,
         4,
         cv2.LINE_AA,
         tipLength=0.30,
@@ -483,7 +474,7 @@ def render_setup_screen(
         buttons,
         "white",
         player_suggestions,
-        168,
+        212,
         focused_field == "white",
         410,
     )
@@ -492,7 +483,7 @@ def render_setup_screen(
         buttons,
         "black",
         player_suggestions,
-        242,
+        276,
         focused_field == "black",
         410,
     )
@@ -501,12 +492,13 @@ def render_setup_screen(
         buttons,
         "event",
         event_suggestions,
-        316,
+        340,
         focused_field == "event",
         530,
     )
 
-    draw_text(view, "Game options", (40, 354), (100, 220, 255), 0.68)
+    visual.card(view, 24, 344, 550, 635)
+    draw_text(view, "Game options", (40, 366), visual.ACCENT, 0.68)
     option_rows = [
         (
             "Clock",
@@ -635,7 +627,8 @@ def render_setup_screen(
             buttons.append(button)
             draw_button(view, button)
 
-    draw_text(view, "Time control", (600, 96), (100, 220, 255), 0.68)
+    visual.card(view, 578, 118, 1076, 583)
+    draw_text(view, "Time control", (600, 108), visual.ACCENT, 0.68)
     enabled = setup.clock_source == "builtin"
     advanced_button = Button(
         "advanced_clock_toggle",

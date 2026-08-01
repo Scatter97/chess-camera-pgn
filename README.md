@@ -1,12 +1,22 @@
-# Chess Camera
+# Knightboard
 
-**Current test release: 0.41**
+### Your offline chess studio
 
-Chess Camera watches a physical over-the-board chess game through a fixed camera, recognizes legal moves, tracks optional clock information, and saves the game as PGN. It also includes game history, local Stockfish review, Chess960 generation, Opening Explorer, Endgame Explorer, board training, illegal-move correction, manual board synchronization, piece themes, move sounds, and optional downloadable chess data.
+**Current release: 0.50.0**
+
+Knightboard is a local-first chess client for recording, reviewing, exploring, and improving your games without an online account. Camera-based over-the-board recording is one part of the app: Knightboard also gives you a local game library, engine review, opening and endgame explorers, Chess960, bot games, board training, custom themes, sounds, and optional downloadable chess data.
 
 The application is designed for Windows, Debian-based Linux distributions, and macOS. Camera processing, games, training data, engines, opening books, and tablebases remain on the local computer.
 
-## Main features
+## What Knightboard does
+
+- **Play:** start Virtual Bot Games, OTB Bot Games, Chess960 positions, or record a physical game through a camera.
+- **Record:** recognize legal over-the-board moves, optionally read clocks, and save complete PGNs locally.
+- **Review:** analyse saved games with a local UCI engine, evaluation bars, suggested moves, accuracy, classifications, and centipawn loss.
+- **Explore:** use local opening books and Syzygy endgame tablebases; no positions are sent online.
+- **Personalise:** save board profiles, train detection, choose piece/sound packs, and manage local chess libraries.
+
+## Feature details
 
 - Record physical chess games from a camera and save legal PGN moves.
 - Use Lichess clock OCR or the configurable built-in chess clock.
@@ -23,14 +33,16 @@ The application is designed for Windows, Debian-based Linux distributions, and m
 - Download optional opening and endgame libraries after installation.
 - Use bundled or custom piece and sound packs.
 
-## Main menu
+## Knightboard home
 
-- **Start OTB Game**
+- **Record OTB Game**
 - **Game History**
 - **Chess960 Generator**
 - **Opening Explorer**
 - **Endgame Explorer**
-- **Settings**
+- **Settings & Libraries**
+- **Virtual Bot Game**
+- **OTB Bot Game**
 - **Exit**
 
 The displayed version is read from `chess_camera_app/core/version.py`.
@@ -103,7 +115,7 @@ When no legal move explains the physical position, the built-in clock pauses. Th
 
 Use **Edit Virtual Board** to add one or more legal moves when the physical and virtual boards no longer match. The editor supports save, undo, reset, and cancel. Saved moves update the PGN and reset the camera reference.
 
-## Data and Libraries — new in 0.41
+## Data and Libraries
 
 Open:
 
@@ -131,7 +143,7 @@ The optional opening package downloads the five ECO TSV files from `lichess-org/
 51b886249b9e418498d25b6e39b926c3de99c29a
 ```
 
-Each source file is checked against its pinned Git blob object ID before Chess Camera converts the PGN lines into a local Polyglot book. The source dataset is CC0.
+Each source file is checked against its pinned Git blob object ID before Knightboard converts the PGN lines into a local Polyglot book. The source dataset is CC0.
 
 Opening Explorer can use:
 
@@ -227,8 +239,8 @@ Only `move.wav` is required.
 ### Windows
 
 ```powershell
-git clone https://github.com/Scatter97/chess-camera-pgn.git
-cd chess-camera-pgn
+git clone https://github.com/Scatter97/knightboard.git
+cd knightboard
 run_windows.bat
 ```
 
@@ -237,8 +249,8 @@ run_windows.bat
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-tk git
-git clone https://github.com/Scatter97/chess-camera-pgn.git
-cd chess-camera-pgn
+git clone https://github.com/Scatter97/knightboard.git
+cd knightboard
 chmod +x run_ubuntu.sh
 ./run_ubuntu.sh
 ```
@@ -246,8 +258,8 @@ chmod +x run_ubuntu.sh
 ### macOS
 
 ```bash
-git clone https://github.com/Scatter97/chess-camera-pgn.git
-cd chess-camera-pgn
+git clone https://github.com/Scatter97/knightboard.git
+cd knightboard
 chmod +x run_mac.command
 ./run_mac.command
 ```
@@ -256,13 +268,13 @@ chmod +x run_mac.command
 
 GitHub Actions builds Windows, Debian, and macOS packages. Generated binaries are uploaded as workflow artifacts rather than committed.
 
-Expected 0.41 outputs:
+Expected 0.50 outputs:
 
 ```text
-ChessCamera-0.41-Windows-x64.zip
-chess-camera_0.41_amd64.deb
-ChessCamera-0.41-macOS.dmg
-ChessCamera-0.41-macOS-app.zip
+Knightboard-0.50.0-Windows-x64.zip
+knightboard_0.50.0_amd64.deb
+Knightboard-0.50.0-macOS.dmg
+Knightboard-0.50.0-macOS-app.zip
 ```
 
 The macOS build is ad-hoc signed but not Apple-notarized.
@@ -295,15 +307,17 @@ See `packaging/README.md` for package details.
 
 Source checkouts store generated data in the repository folder. Packaged applications use:
 
-- Windows: `%LOCALAPPDATA%\ChessCamera`
-- Debian/Linux: `${XDG_DATA_HOME:-~/.local/share}/chess-camera`
-- macOS: `~/Library/Application Support/ChessCamera`
+- Windows: `%LOCALAPPDATA%\Knightboard`
+- Debian/Linux: `${XDG_DATA_HOME:-~/.local/share}/knightboard`
+- macOS: `~/Library/Application Support/Knightboard`
+
+Knightboard automatically copies existing Chess Camera data into the new folder on first packaged launch without overwriting newer files. This preserves saved games, board profiles, engines, piece packs, sound packs, and downloaded libraries.
 
 The default optional library is under `content_library/` inside that location. Data Manager can point optional libraries to another drive; changing the location does not automatically move existing downloads.
 
 ## Important files
 
-- `chess_camera.py` — application entry point and main menu
+- `chess_camera.py` — application entry point and Knightboard home
 - `chess_camera_app/core/app.py` — camera game loop, clocks, move confirmation, and PGN recording
 - `chess_camera_app/detection/` — square changes, camera input, OCR, and Local64 detection
 - `chess_camera_app/content/` — package storage, downloads, and the Data and Libraries interface

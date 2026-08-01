@@ -39,7 +39,7 @@ ALLOWED_DOWNLOAD_HOSTS = {
     "raw.githubusercontent.com",
     "tablebase.lichess.ovh",
 }
-USER_AGENT = "ChessCamera/0.41 (+https://github.com/Scatter97/chess-camera-pgn)"
+USER_AGENT = "Knightboard/0.50 (+https://github.com/Scatter97/knightboard)"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 MIN_TABLEBASE_FREE_BYTES = 1_250_000_000
 TABLEBASE_FILENAME = re.compile(r"^[A-Za-z0-9]+v[A-Za-z0-9]+\.rtb[zw]$")

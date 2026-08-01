@@ -28,6 +28,7 @@ from chess_camera_app.runtime import runtime_0397_patch
 from chess_camera_app.runtime import runtime_multi_move_patch
 from chess_camera_app.ui import training_settings
 from chess_camera_app.ui import ui_support as ui
+from chess_camera_app.ui import visual_system
 from chess_camera_app.ui.pregame_ui import Button
 from chess_camera_app.core.version import APP_VERSION, VERSION_LABEL
 
@@ -56,20 +57,20 @@ CAMERA_CONFIG_KEYS = (
 
 def home_screen() -> str:
     """Show a scalable feature grid with room for future tools."""
-    window = f"Chess Camera {APP_VERSION}"
+    window = VERSION_LABEL
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window, 1120, 760)
 
     buttons = [
-        Button("start", "START OTB GAME", 55, 180, 310, 105, active=True),
-        Button("history", "GAME HISTORY", 405, 180, 310, 105),
-        Button("chess960", "CHESS960 GENERATOR", 755, 180, 310, 105),
-        Button("opening", "OPENING EXPLORER", 55, 360, 310, 105),
-        Button("settings", "SETTINGS", 405, 360, 310, 105),
-        Button("endgame", "ENDGAME EXPLORER", 755, 360, 310, 105),
-        Button("virtual_bot", "VIRTUAL BOT GAME", 230, 535, 310, 82),
-        Button("otb_bot", "OTB BOT GAME", 580, 535, 310, 82),
-        Button("exit", "EXIT", 430, 680, 260, 48),
+        Button("start", "RECORD OTB GAME", 55, 220, 310, 92, active=True),
+        Button("history", "GAME HISTORY", 405, 220, 310, 92),
+        Button("chess960", "CHESS960", 755, 220, 310, 92),
+        Button("opening", "OPENING EXPLORER", 55, 405, 310, 92),
+        Button("endgame", "ENDGAME EXPLORER", 405, 405, 310, 92),
+        Button("settings", "SETTINGS & LIBRARIES", 755, 405, 310, 92),
+        Button("virtual_bot", "VIRTUAL BOT GAME", 230, 575, 310, 72),
+        Button("otb_bot", "OTB BOT GAME", 580, 575, 310, 72),
+        Button("exit", "EXIT KNIGHTBOARD", 430, 684, 260, 44),
     ]
     queue: list[str] = []
 
@@ -81,37 +82,39 @@ def home_screen() -> str:
 
     cv2.setMouseCallback(window, mouse)
     while True:
-        view = np.zeros((760, 1120, 3), dtype=np.uint8)
-        view[:] = (28, 31, 37)
-        ui._put(view, "Chess Camera", (55, 78), (100, 220, 255), 1.25, 2)
-        ui._put(view, VERSION_LABEL, (57, 120), (120, 255, 170), 0.62)
+        view = visual_system.canvas(760, 1120)
+        visual_system.brand_header(view, "Your offline chess studio", VERSION_LABEL)
+        ui._put(view, "Play, record, analyse, and explore — all locally.", (57, 124), visual_system.TEXT, 0.69, 2)
         ui._put(
             view,
-            "Record games, review them, and use local chess tools.",
-            (57, 155),
-            (165, 175, 190),
-            0.52,
+            "Your games, camera data, engines and chess libraries stay on your computer.",
+            (57, 158), visual_system.MUTED, 0.48,
         )
+
+        for left, top, right, bottom in ((35, 195, 385, 350), (385, 195, 735, 350),
+                                         (735, 195, 1085, 350), (35, 380, 385, 535),
+                                         (385, 380, 735, 535), (735, 380, 1085, 535)):
+            visual_system.card(view, left, top, right, bottom)
 
         for button in buttons:
             pregame_ui.draw_button(view, button)
 
         descriptions = [
-            ("Camera recording and PGN", 75, 320),
-            ("Saved games and analysis", 425, 320),
-            ("Random legal start position", 775, 320),
-            ("Built-in, downloaded, or custom", 75, 500),
-            ("App options and data manager", 425, 500),
-            ("Downloaded or custom Syzygy", 775, 500),
+            ("Camera recording, clocks and PGN", 75, 337),
+            ("Saved games, accuracy and review", 425, 337),
+            ("Generate a legal random start", 775, 337),
+            ("Names, moves and local theory", 75, 522),
+            ("Local Syzygy tablebase analysis", 425, 522),
+            ("Appearance, engine and data", 775, 522),
         ]
         for text, x, y in descriptions:
-            ui._put(view, text, (x, y), (175, 185, 200), 0.40)
+            ui._put(view, text, (x, y), visual_system.MUTED, 0.40)
 
         ui._put(
             view,
-            "Optional opening and tablebase data can be installed after setup.",
+            "Knightboard v0.50  •  Local-first chess tools",
             (300, 725),
-            (135, 145, 160),
+            visual_system.MUTED,
             0.42,
         )
 
@@ -177,6 +180,7 @@ def install_accuracy_sampling_sync() -> None:
 
 
 def main() -> None:
+    visual_system.install_window_branding()
     runtime_multi_move_patch.install(app)
     ui.install_clean_highgui_windows()
     ui.install_profile_creation_prompt()
