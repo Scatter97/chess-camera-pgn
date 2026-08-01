@@ -316,15 +316,54 @@ def apply_setup_suggestion(
     return replace(setup, **{attribute: value}) if attribute else setup
 
 
+def _clipboard_text() -> str | None:
+    """Read text from the system clipboard when a desktop clipboard is available."""
+    try:
+        import tkinter as tk
+    except ImportError:
+        return None
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            value = root.clipboard_get()
+        finally:
+            root.destroy()
+    except tk.TclError:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def copy_text_to_clipboard(value: str) -> bool:
+    """Copy text to the system clipboard without keeping a visible Tk window open."""
+    try:
+        import tkinter as tk
+    except ImportError:
+        return False
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.clipboard_clear()
+        root.clipboard_append(value)
+        root.update()
+        root.destroy()
+        return True
+    except tk.TclError:
+        return False
+
+
 def prompt_for_text(title: str, label: str, current: str) -> str | None:
     """Show a small editable OpenCV text prompt."""
     window = title
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 680, 260)
+    cv2.resizeWindow(window, 760, 280)
     value = current
     buttons = [
-        Button("save", "SAVE", 135, 180, 180, 52, active=True),
-        Button("cancel", "Cancel", 365, 180, 180, 52),
+        Button("clear", "CLEAR", 40, 195, 180, 52),
+        Button("save", "SAVE", 290, 195, 180, 52, active=True),
+        Button("cancel", "Cancel", 540, 195, 180, 52),
     ]
     clicks: list[str] = []
 
@@ -338,13 +377,14 @@ def prompt_for_text(title: str, label: str, current: str) -> str | None:
 
     cv2.setMouseCallback(window, on_mouse)
     while True:
-        view = np.zeros((260, 680, 3), dtype=np.uint8)
+        view = np.zeros((280, 760, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
         put_text(view, title, (34, 48), (100, 220, 255), 0.82)
         put_text(view, label, (34, 88), (165, 175, 190), 0.50)
-        cv2.rectangle(view, (34, 102), (646, 153), (46, 50, 58), -1)
-        cv2.rectangle(view, (34, 102), (646, 153), (120, 255, 170), 2)
-        put_text(view, value[-44:] or "Type a name", (48, 136), scale=0.59)
+        cv2.rectangle(view, (34, 102), (726, 158), (46, 50, 58), -1)
+        cv2.rectangle(view, (34, 102), (726, 158), (120, 255, 170), 2)
+        put_text(view, value[-70:] or "Type or paste text", (48, 138), scale=0.47)
+        put_text(view, "Ctrl+V to paste", (38, 180), (145, 155, 170), 0.40)
         for button in buttons:
             draw_button(view, button)
         cv2.imshow(window, view)
@@ -353,12 +393,18 @@ def prompt_for_text(title: str, label: str, current: str) -> str | None:
         if action == "save" or key in (10, 13):
             cv2.destroyWindow(window)
             return value.strip()
+        if action == "clear":
+            value = ""
         if action == "cancel" or key == 27:
             cv2.destroyWindow(window)
             return None
         if key in (8, 127):
             value = value[:-1]
-        elif 32 <= key <= 126 and len(value) < 40:
+        elif key in (22,):  # Ctrl+V
+            pasted = _clipboard_text()
+            if pasted:
+                value = (value + pasted).replace("\r", "").replace("\n", " ")[:256]
+        elif 32 <= key <= 126 and len(value) < 256:
             value += chr(key)
 
 
