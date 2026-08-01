@@ -9,6 +9,8 @@ import numpy as np
 
 import app
 import app_navigation as navigation
+import content_library
+import content_manager_ui
 import pregame_ui
 import ui_support as ui
 from opening_book_builder import build_polyglot_book_from_tsv
@@ -19,7 +21,7 @@ WINDOW_NAME = "Chess Camera - Opening Explorer"
 BOOK_DIRECTORY = Path("books")
 DEFAULT_BOOK_SOURCE = BOOK_DIRECTORY / "default_openings.tsv"
 DEFAULT_BOOK_PATH = BOOK_DIRECTORY / "chess_camera_default.bin"
-MAX_VISIBLE_MOVES = 10
+MAX_VISIBLE_MOVES = 9
 
 
 def _ensure_builtin_book() -> tuple[Path | None, str | None]:
@@ -48,32 +50,40 @@ def _ensure_builtin_book() -> tuple[Path | None, str | None]:
 
 def _save_book_choice(mode: str, path: Path | None = None) -> None:
     data = navigation._config()
-    data["opening_book_mode"] = mode
+    data[content_library.OPENING_BOOK_MODE_KEY] = mode
     if path is not None:
-        data["opening_book_path"] = str(path)
+        data[content_library.OPENING_BOOK_PATH_KEY] = str(path)
+    elif mode == "builtin":
+        data.pop(content_library.OPENING_BOOK_PATH_KEY, None)
     navigation._save_config(data)
 
 
-def _configured_book() -> tuple[Path | None, bool, str | None]:
-    """Return the active book, whether it is built in, and a status message."""
+def _configured_book() -> tuple[Path | None, str, str | None]:
+    """Return the active book, source mode, and an optional status message."""
     builtin_path, builtin_error = _ensure_builtin_book()
+    downloaded_path = content_library.downloaded_opening_book(app.CONFIG_PATH)
     data = navigation._config()
-    configured = data.get("opening_book_path")
+    configured = data.get(content_library.OPENING_BOOK_PATH_KEY)
     custom_path = Path(configured) if isinstance(configured, str) else None
-    mode = data.get("opening_book_mode")
+    mode = data.get(content_library.OPENING_BOOK_MODE_KEY)
 
-    if mode not in {"builtin", "custom"}:
-        mode = "custom" if custom_path is not None and custom_path.is_file() else "builtin"
+    if mode == "downloaded":
+        if downloaded_path is not None:
+            return downloaded_path, "downloaded", builtin_error
+        fallback = "Downloaded opening database is missing; using the built-in book."
+        return builtin_path, "builtin", builtin_error or fallback
 
     if mode == "custom":
         if custom_path is not None and custom_path.is_file():
-            return custom_path, False, builtin_error
-        fallback_message = "Custom book is missing; using the built-in book."
-        if builtin_path is not None:
-            return builtin_path, True, fallback_message
-        return None, True, builtin_error or fallback_message
+            return custom_path, "custom", builtin_error
+        fallback = "Custom book is missing; using the built-in book."
+        return builtin_path, "builtin", builtin_error or fallback
 
-    return builtin_path, True, builtin_error
+    if mode not in {"builtin", "custom", "downloaded"}:
+        if custom_path is not None and custom_path.is_file():
+            return custom_path, "custom", builtin_error
+
+    return builtin_path, "builtin", builtin_error
 
 
 def _choose_book_file(current: Path | None) -> tuple[Path | None, str | None]:
@@ -147,14 +157,13 @@ def _book_entries(
 
 
 def _render_position(board: chess.Board, size: int = 560) -> np.ndarray:
-    """Use the exact board and piece renderer used by live play and analysis."""
     rendered = app.render_virtual_board(board)
     return cv2.resize(rendered, (size, size), interpolation=cv2.INTER_AREA)
 
 
 def show_opening_explorer() -> None:
     board = chess.Board()
-    book_path, using_builtin, startup_message = _configured_book()
+    book_path, source_mode, startup_message = _configured_book()
     message = startup_message or ""
     buttons: list[Button] = []
     queue: list[str] = []
@@ -175,12 +184,13 @@ def show_opening_explorer() -> None:
         if book_error:
             message = book_error
 
+        downloaded_path = content_library.downloaded_opening_book(app.CONFIG_PATH)
         view = np.zeros((780, 1280, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
         ui._put(view, "Opening Explorer", (38, 52), (100, 220, 255), 0.95, 2)
         ui._put(
             view,
-            "Explore moves from the built-in book or a custom Polyglot .bin file.",
+            "Explore built-in, downloaded, or custom Polyglot opening books.",
             (40, 83),
             (165, 175, 190),
             0.50,
@@ -191,8 +201,10 @@ def show_opening_explorer() -> None:
 
         if book_path is None:
             book_name = "No readable opening book"
-        elif using_builtin:
+        elif source_mode == "builtin":
             book_name = f"Built-in: {book_path.name}"
+        elif source_mode == "downloaded":
+            book_name = f"Downloaded: {book_path.name}"
         else:
             book_name = f"Custom: {book_path.name}"
 
@@ -206,45 +218,55 @@ def show_opening_explorer() -> None:
             0.46,
         )
 
-        choose = Button("choose_book", "CHOOSE BOOK...", 1000, 112, 230, 44)
+        choose = Button("choose_book", "CHOOSE CUSTOM BOOK...", 985, 112, 245, 44)
         builtin = Button(
             "use_builtin",
             "USE BUILT-IN",
-            1000,
+            985,
             164,
-            230,
+            245,
             44,
-            enabled=not using_builtin,
+            enabled=source_mode != "builtin",
         )
+        downloaded = Button(
+            "use_downloaded",
+            "USE DOWNLOADED",
+            640,
+            218,
+            180,
+            44,
+            enabled=downloaded_path is not None and source_mode != "downloaded",
+        )
+        manage = Button("manage_data", "DATA MANAGER", 835, 218, 180, 44)
+        menu = Button("back", "MAIN MENU", 1030, 218, 200, 44)
         reset = Button(
             "reset",
             "RESET",
             640,
-            218,
+            270,
             150,
-            44,
+            42,
             enabled=bool(board.move_stack),
         )
         undo = Button(
             "undo",
             "BACK MOVE",
             805,
-            218,
+            270,
             160,
-            44,
+            42,
             enabled=bool(board.move_stack),
         )
-        menu = Button("back", "MAIN MENU", 980, 218, 250, 44)
-        buttons = [choose, builtin, reset, undo, menu]
+        buttons = [choose, builtin, downloaded, manage, menu, reset, undo]
         for button in buttons:
             pregame_ui.draw_button(view, button)
 
-        ui._put(view, "BOOK MOVES", (640, 302), (100, 220, 255), 0.54)
+        ui._put(view, "BOOK MOVES", (640, 338), (100, 220, 255), 0.54)
         if book_path is None:
             ui._put(
                 view,
-                "The built-in book could not be prepared. Choose another .bin file.",
-                (640, 340),
+                "No readable book is active. Open Data Manager or choose a .bin file.",
+                (640, 374),
                 (185, 195, 210),
                 0.43,
             )
@@ -252,7 +274,7 @@ def show_opening_explorer() -> None:
             ui._put(
                 view,
                 "This position has no moves in the active book.",
-                (640, 340),
+                (640, 374),
                 (185, 195, 210),
                 0.46,
             )
@@ -264,7 +286,7 @@ def show_opening_explorer() -> None:
                 except (ValueError, AssertionError):
                     san = entry.move.uci()
                 percent = 100.0 * entry.weight / total_weight
-                y = 324 + index * 39
+                y = 354 + index * 39
                 move_button = Button(
                     f"play_{index}",
                     f"{san:<10}  {entry.weight:>6}  {percent:5.1f}%",
@@ -295,7 +317,7 @@ def show_opening_explorer() -> None:
                 message = error
             elif selected is not None:
                 book_path = selected
-                using_builtin = False
+                source_mode = "custom"
                 _save_book_choice("custom", selected)
                 board.reset()
                 message = f"Loaded custom book: {selected.name}"
@@ -305,10 +327,25 @@ def show_opening_explorer() -> None:
                 message = error
             elif builtin_path is not None:
                 book_path = builtin_path
-                using_builtin = True
+                source_mode = "builtin"
                 _save_book_choice("builtin")
                 board.reset()
                 message = "Using the built-in CC0-derived opening book."
+        elif action == "use_downloaded":
+            if content_library.activate_downloaded_opening(app.CONFIG_PATH):
+                book_path, source_mode, status = _configured_book()
+                board.reset()
+                message = status or "Using the downloaded expanded opening database."
+            else:
+                message = "The downloaded opening database could not be found."
+        elif action == "manage_data":
+            cv2.destroyWindow(WINDOW_NAME)
+            content_manager_ui.show_content_manager(app, navigation)
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(WINDOW_NAME, 1280, 780)
+            cv2.setMouseCallback(WINDOW_NAME, mouse)
+            book_path, source_mode, status = _configured_book()
+            message = status or "Opening-library status refreshed."
         elif action == "reset" or key in (ord("r"), ord("R")):
             board.reset()
             message = ""
