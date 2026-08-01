@@ -14,6 +14,7 @@ from chess_camera_app.analysis import endgame_explorer
 from chess_camera_app.ui import feature_settings
 from chess_camera_app.ui import game_history
 from chess_camera_app.game import game_session
+from chess_camera_app.game import bot_games
 from chess_camera_app.detection import local64_occlusion_fix
 from chess_camera_app.detection import local_detection
 from chess_camera_app.detection import local_detection_runtime
@@ -66,7 +67,9 @@ def home_screen() -> str:
         Button("opening", "OPENING EXPLORER", 55, 360, 310, 105),
         Button("settings", "SETTINGS", 405, 360, 310, 105),
         Button("endgame", "ENDGAME EXPLORER", 755, 360, 310, 105),
-        Button("exit", "EXIT", 430, 635, 260, 56),
+        Button("virtual_bot", "VIRTUAL BOT GAME", 230, 535, 310, 82),
+        Button("otb_bot", "OTB BOT GAME", 580, 535, 310, 82),
+        Button("exit", "EXIT", 430, 680, 260, 48),
     ]
     queue: list[str] = []
 
@@ -122,6 +125,8 @@ def home_screen() -> str:
             "opening",
             "endgame",
             "settings",
+            "virtual_bot",
+            "otb_bot",
             "exit",
         }:
             cv2.destroyWindow(window)
@@ -211,6 +216,10 @@ def main() -> None:
             opening_explorer.show_opening_explorer()
         elif action == "endgame":
             endgame_explorer.show_endgame_explorer()
+        elif action == "virtual_bot":
+            bot_games.show_virtual_bot_game()
+        elif action == "otb_bot":
+            bot_games.show_virtual_bot_game(otb=True)
         elif action == "settings":
             navigation.settings_screen()
         elif action == "start":

@@ -197,6 +197,26 @@ def _evaluation_from_info(
     return PositionEvaluation(centipawns, mate, best_move_uci)
 
 
+def evaluate_position(
+    board: chess.Board,
+    engine_path: Path,
+    seconds: float = 0.12,
+) -> PositionEvaluation:
+    """Evaluate one position from White's perspective with a local UCI engine."""
+    try:
+        engine = chess.engine.SimpleEngine.popen_uci(str(engine_path), timeout=5.0)
+    except (OSError, TimeoutError, chess.engine.EngineError) as error:
+        raise AnalysisUnavailable(f"Could not start the selected engine: {error}") from error
+    try:
+        info = engine.analyse(board, chess.engine.Limit(time=max(0.05, seconds)))
+        return _evaluation_from_info(info, chess.WHITE)
+    finally:
+        try:
+            engine.quit()
+        except chess.engine.EngineError:
+            pass
+
+
 def build_game_review(
     moves: Iterable[chess.Move],
     evaluations: list[PositionEvaluation],

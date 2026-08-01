@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
 from pathlib import Path
 
 import chess
@@ -14,6 +16,7 @@ from chess_camera_app.content import content_manager_ui
 from chess_camera_app.ui import pregame_ui
 from chess_camera_app.ui import ui_support as ui
 from chess_camera_app.analysis.opening_book_builder import build_polyglot_book_from_tsv
+from chess_camera_app.analysis import game_analysis
 from chess_camera_app.ui.pregame_ui import Button
 
 
@@ -22,6 +25,31 @@ BOOK_DIRECTORY = Path("books")
 DEFAULT_BOOK_SOURCE = BOOK_DIRECTORY / "default_openings.tsv"
 DEFAULT_BOOK_PATH = BOOK_DIRECTORY / "chess_camera_default.bin"
 MAX_VISIBLE_MOVES = 9
+
+
+@lru_cache(maxsize=4)
+def _opening_name_lines(source_path: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    path = Path(source_path)
+    if not path.is_file():
+        return ()
+    with path.open("r", encoding="utf-8", newline="") as source:
+        rows = csv.DictReader(source, delimiter="\t")
+        return tuple(
+            (str(row.get("name") or "").strip(), tuple(str(row.get("uci") or "").split()))
+            for row in rows
+            if str(row.get("name") or "").strip() and str(row.get("uci") or "").strip()
+        )
+
+
+def opening_name(board: chess.Board, source_path: Path = DEFAULT_BOOK_SOURCE) -> str | None:
+    """Return the longest matching named line for the current move history."""
+    played = tuple(move.uci() for move in board.move_stack)
+    best: str | None = None
+    best_length = -1
+    for name, line in _opening_name_lines(str(source_path)):
+        if len(line) <= len(played) and played[:len(line)] == line and len(line) > best_length:
+            best, best_length = name, len(line)
+    return best
 
 
 def _ensure_builtin_book() -> tuple[Path | None, str | None]:
@@ -165,6 +193,9 @@ def show_opening_explorer() -> None:
     board = chess.Board()
     book_path, source_mode, startup_message = _configured_book()
     message = startup_message or ""
+    evaluation_fen = ""
+    evaluation_text = "Engine not configured"
+    evaluation_cp = 0
     buttons: list[Button] = []
     queue: list[str] = []
 
@@ -180,6 +211,18 @@ def show_opening_explorer() -> None:
     cv2.setMouseCallback(WINDOW_NAME, mouse)
 
     while True:
+        if board.fen() != evaluation_fen:
+            engine_path = navigation.configured_engine()
+            if engine_path is None:
+                evaluation_text, evaluation_cp = "Engine not configured", 0
+            else:
+                try:
+                    score = game_analysis.evaluate_position(board, engine_path)
+                    evaluation_cp = score.centipawns
+                    evaluation_text = (f"M{score.mate:+d}" if score.mate is not None else f"{score.centipawns / 100:+.2f}")
+                except game_analysis.AnalysisUnavailable as error:
+                    evaluation_text, evaluation_cp = str(error), 0
+            evaluation_fen = board.fen()
         entries, book_error = _book_entries(book_path, board)
         if book_error:
             message = book_error
@@ -198,6 +241,12 @@ def show_opening_explorer() -> None:
 
         position_image = _render_position(board)
         view[120:680, 35:595] = position_image
+        # White's share fills upward; a neutral position is half-and-half.
+        bar_top, bar_bottom = 120, 680
+        white_height = int((bar_bottom - bar_top) * (0.5 + max(-800, min(800, evaluation_cp)) / 1600))
+        cv2.rectangle(view, (605, bar_top), (620, bar_bottom), (40, 40, 40), -1)
+        cv2.rectangle(view, (605, bar_bottom - white_height), (620, bar_bottom), (225, 225, 225), -1)
+        ui._put(view, evaluation_text[:9], (600, 108), (225, 225, 225), 0.38)
 
         if book_path is None:
             book_name = "No readable opening book"
@@ -217,6 +266,9 @@ def show_opening_explorer() -> None:
             (210, 215, 225),
             0.46,
         )
+        name = opening_name(board)
+        ui._put(view, "OPENING", (640, 212), (165, 175, 190), 0.42)
+        ui._put(view, (name or "Unnamed position")[:52], (730, 212), (255, 220, 120), 0.46)
 
         choose = Button("choose_book", "CHOOSE CUSTOM BOOK...", 985, 112, 245, 44)
         builtin = Button(
