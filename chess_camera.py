@@ -9,6 +9,7 @@ import calibration_cleanup
 import calibration_ui
 import camera_advanced
 import chess960_generator
+import endgame_explorer
 import feature_settings
 import game_history
 import game_session
@@ -56,15 +57,7 @@ def home_screen() -> str:
         Button("chess960", "CHESS960 GENERATOR", 755, 180, 310, 105),
         Button("opening", "OPENING EXPLORER", 55, 360, 310, 105),
         Button("settings", "SETTINGS", 405, 360, 310, 105),
-        Button(
-            "future",
-            "MORE FEATURES SOON",
-            755,
-            360,
-            310,
-            105,
-            enabled=False,
-        ),
+        Button("endgame", "ENDGAME EXPLORER", 755, 360, 310, 105),
         Button("exit", "EXIT", 430, 635, 260, 56),
     ]
     queue: list[str] = []
@@ -98,14 +91,14 @@ def home_screen() -> str:
             ("Random legal start position", 775, 320),
             ("Built-in or custom book", 75, 500),
             ("Engine and app options", 425, 500),
-            ("Reserved expansion space", 775, 500),
+            ("Local Syzygy tablebases", 775, 500),
         ]
         for text, x, y in descriptions:
             ui._put(view, text, (x, y), (175, 185, 200), 0.40)
 
         ui._put(
             view,
-            "Feature cards can be replaced or expanded in later versions.",
+            "All analysis and tablebase data stays on your computer.",
             (320, 725),
             (135, 145, 160),
             0.42,
@@ -119,6 +112,7 @@ def home_screen() -> str:
             "history",
             "chess960",
             "opening",
+            "endgame",
             "settings",
             "exit",
         }:
@@ -205,6 +199,8 @@ def main() -> None:
             chess960_generator.show_chess960_generator()
         elif action == "opening":
             opening_explorer.show_opening_explorer()
+        elif action == "endgame":
+            endgame_explorer.show_endgame_explorer()
         elif action == "settings":
             navigation.settings_screen()
         elif action == "start":
