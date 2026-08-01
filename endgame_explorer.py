@@ -153,6 +153,14 @@ def _wdl_label(wdl: int) -> str:
     return labels.get(wdl, "Unknown")
 
 
+def _result_label(board: chess.Board, wdl: int) -> str:
+    """Return the actual game result, rather than only the side-to-move result."""
+    if wdl == 0:
+        return "DRAW"
+    winner = board.turn if wdl > 0 else not board.turn
+    return "WHITE WINS" if winner == chess.WHITE else "BLACK WINS"
+
+
 def _render_position(board: chess.Board, size: int = 560) -> np.ndarray:
     rendered = app.render_virtual_board(board)
     return cv2.resize(rendered, (size, size), interpolation=cv2.INTER_AREA)
@@ -288,12 +296,13 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
             44,
             enabled=downloaded_directory is not None and source_mode != "downloaded",
         )
-        fen = Button("load_fen", "LOAD FEN...", 640, 218, 170, 44)
-        reset = Button("reset", "RESET", 825, 218, 130, 44, enabled=bool(board.move_stack))
-        undo = Button("undo", "BACK MOVE", 970, 218, 125, 44, enabled=bool(board.move_stack))
-        manage = Button("manage_data", "DATA", 1110, 218, 120, 44)
+        fen = Button("load_fen", "FEN INPUT...", 640, 218, 140, 44)
+        copy_fen = Button("copy_fen", "COPY FEN", 790, 218, 120, 44)
+        reset = Button("reset", "RESET", 920, 218, 100, 44, enabled=bool(board.move_stack))
+        undo = Button("undo", "BACK MOVE", 1030, 218, 110, 44, enabled=bool(board.move_stack))
+        manage = Button("manage_data", "DATA", 1150, 218, 80, 44)
         menu = Button("back", "MAIN MENU", 985, 700, 245, 44)
-        buttons = [choose, downloaded, fen, reset, undo, manage, menu]
+        buttons = [choose, downloaded, fen, copy_fen, reset, undo, manage, menu]
         if probe is not None:
             buttons.extend(_move_buttons(board, probe.moves))
         for button in buttons:
@@ -301,7 +310,7 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
 
         if probe is not None:
             ui._put(view, "TABLEBASE RESULT", (640, 304), (100, 220, 255), 0.54)
-            ui._put(view, _wdl_label(probe.wdl), (640, 340), (120, 255, 170), 0.72, 2)
+            ui._put(view, _result_label(board, probe.wdl), (640, 340), (120, 255, 170), 0.72, 2)
             ui._put(view, f"DTZ {probe.dtz:+d}", (810, 340), (210, 215, 225), 0.54)
             ui._put(view, "ROOT MOVES", (640, 376), (165, 175, 190), 0.44)
         else:
@@ -344,7 +353,11 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
             last_fen = ""
             message = "Tablebase-library status refreshed."
         elif action == "load_fen":
-            value = app.prompt_for_text("Endgame position", "FEN", board.fen())
+            value = app.prompt_for_text(
+                "Endgame position",
+                "Paste a FEN with Ctrl+V, or type one. CLEAR empties the input.",
+                board.fen(),
+            )
             if value is not None:
                 loaded, error = _fen_board(value)
                 if error:
@@ -352,6 +365,12 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
                 elif loaded is not None:
                     board = loaded
                     last_fen = ""
+        elif action == "copy_fen":
+            message = (
+                "FEN copied to the clipboard."
+                if app.copy_text_to_clipboard(board.fen())
+                else "Could not access the system clipboard."
+            )
         elif action == "reset":
             board = chess.Board(DEFAULT_ENDGAME_FEN)
             last_fen = ""
