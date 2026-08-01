@@ -9,6 +9,7 @@ import calibration_cleanup
 import calibration_ui
 import camera_advanced
 import chess960_generator
+import content_manager_ui
 import endgame_explorer
 import feature_settings
 import game_history
@@ -42,6 +43,11 @@ CAMERA_CONFIG_KEYS = (
     "sound_pack",
     "piece_sounds_enabled",
     "move_highlights_enabled",
+    "content_storage_path",
+    "opening_book_mode",
+    "opening_book_path",
+    "endgame_tablebase_mode",
+    "endgame_tablebase_path",
 )
 
 
@@ -89,17 +95,17 @@ def home_screen() -> str:
             ("Camera recording and PGN", 75, 320),
             ("Saved games and analysis", 425, 320),
             ("Random legal start position", 775, 320),
-            ("Built-in or custom book", 75, 500),
-            ("Engine and app options", 425, 500),
-            ("Local Syzygy tablebases", 775, 500),
+            ("Built-in, downloaded, or custom", 75, 500),
+            ("App options and data manager", 425, 500),
+            ("Downloaded or custom Syzygy", 775, 500),
         ]
         for text, x, y in descriptions:
             ui._put(view, text, (x, y), (175, 185, 200), 0.40)
 
         ui._put(
             view,
-            "All analysis and tablebase data stays on your computer.",
-            (320, 725),
+            "Optional opening and tablebase data can be installed after setup.",
+            (300, 725),
             (135, 145, 160),
             0.42,
         )
@@ -129,7 +135,7 @@ def home_screen() -> str:
 
 
 def install_camera_config_persistence() -> None:
-    """Keep camera, detection, theme, and sound settings when setup is saved."""
+    """Keep camera, detection, theme, sound, and library settings."""
     original_save = app.save_config
 
     def save_with_camera_settings(*args: object, **kwargs: object) -> None:
@@ -190,6 +196,7 @@ def main() -> None:
     training_settings.install(app, navigation)
     piece_theme_system.install(app)
     feature_settings.install(app, navigation)
+    content_manager_ui.install(app, navigation)
 
     while True:
         action = home_screen()

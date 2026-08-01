@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import io
 import struct
 from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
 import chess
+import chess.pgn
 import chess.polyglot
 
 
@@ -92,22 +94,65 @@ def build_polyglot_book(
     return write_polyglot_book(count_uci_lines(uci_lines), output_path)
 
 
+def _pgn_line_to_uci(line: str, source_label: str) -> str:
+    """Convert one headerless PGN mainline to a space-separated UCI line."""
+    document = f'[Event "Opening import"]\n\n{line.strip()} *\n'
+    try:
+        game = chess.pgn.read_game(io.StringIO(document))
+    except (ValueError, UnicodeError) as error:
+        raise ValueError(f"Could not parse PGN opening line from {source_label}.") from error
+    if game is None:
+        raise ValueError(f"Could not parse PGN opening line from {source_label}.")
+    moves = list(game.mainline_moves())
+    if not moves:
+        raise ValueError(f"Opening line from {source_label} contains no legal moves.")
+    return " ".join(move.uci() for move in moves)
+
+
+def uci_lines_from_tsv(source_path: Path) -> list[str]:
+    """Load opening lines from a TSV containing either ``uci`` or ``pgn``."""
+    with source_path.open("r", encoding="utf-8", newline="") as source:
+        rows = csv.DictReader(source, delimiter="\t")
+        fields = set(rows.fieldnames or ())
+        if "uci" not in fields and "pgn" not in fields:
+            raise ValueError(
+                f"{source_path} must contain a tab-separated 'uci' or 'pgn' column."
+            )
+
+        lines: list[str] = []
+        for row_number, row in enumerate(rows, start=2):
+            uci = (row.get("uci") or "").strip()
+            if uci:
+                lines.append(uci)
+                continue
+            pgn = (row.get("pgn") or "").strip()
+            if pgn:
+                lines.append(
+                    _pgn_line_to_uci(pgn, f"{source_path.name}:{row_number}")
+                )
+
+    if not lines:
+        raise ValueError(f"{source_path} contains no opening lines.")
+    return lines
+
+
 def build_polyglot_book_from_tsv(
     source_path: Path,
     output_path: Path,
 ) -> int:
-    """Build a book from a TSV file containing a column named ``uci``."""
-    with source_path.open("r", encoding="utf-8", newline="") as source:
-        rows = csv.DictReader(source, delimiter="\t")
-        if rows.fieldnames is None or "uci" not in rows.fieldnames:
-            raise ValueError(f"{source_path} must contain a tab-separated 'uci' column.")
-        lines = [
-            (row.get("uci") or "").strip()
-            for row in rows
-            if (row.get("uci") or "").strip()
-        ]
+    """Build a book from a TSV containing UCI or headerless PGN lines."""
+    return build_polyglot_book(uci_lines_from_tsv(source_path), output_path)
 
-    if not lines:
-        raise ValueError(f"{source_path} contains no opening lines.")
 
-    return build_polyglot_book(lines, output_path)
+def build_polyglot_book_from_tsvs(
+    source_paths: Iterable[Path],
+    output_path: Path,
+) -> int:
+    """Combine multiple opening TSV files into one weighted Polyglot book."""
+    all_lines: list[str] = []
+    paths = list(source_paths)
+    if not paths:
+        raise ValueError("At least one opening source file is required.")
+    for source_path in paths:
+        all_lines.extend(uci_lines_from_tsv(source_path))
+    return build_polyglot_book(all_lines, output_path)

@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 camera_config.json
 board_profiles/
+content_library/
 engines/
 games/
 piece_packs/
