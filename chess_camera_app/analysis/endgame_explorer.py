@@ -24,6 +24,10 @@ MAX_VISIBLE_MOVES = 9
 TABLEBASE_EXTENSIONS = ("*.rtbw", "*.rtbz")
 LAST_ENDGAME_FEN_KEY = "last_endgame_explorer_fen"
 DEFAULT_ENDGAME_FEN = "7k/8/8/8/8/8/4K3/5Q2 w - - 0 1"
+EDITOR_SIZE = 448
+EDITOR_ORIGIN = (28, 108)
+EDITOR_SQUARE = EDITOR_SIZE // 8
+EDITOR_TRAY = ("P", "N", "B", "R", "Q", "K")
 
 
 @dataclass(frozen=True)
@@ -162,6 +166,127 @@ def _render_position(board: chess.Board, size: int = 560) -> np.ndarray:
     return cv2.resize(rendered, (size, size), interpolation=cv2.INTER_AREA)
 
 
+def _editor_square_at(x: int, y: int) -> chess.Square | None:
+    left, top = EDITOR_ORIGIN
+    if not (left <= x < left + EDITOR_SIZE and top <= y < top + EDITOR_SIZE):
+        return None
+    file_index = (x - left) // EDITOR_SQUARE
+    rank_index = 7 - ((y - top) // EDITOR_SQUARE)
+    return chess.square(file_index, rank_index)
+
+
+def _editor_tray_piece(x: int, y: int) -> chess.Piece | None:
+    # Black tray is at the top; White tray is at the bottom.
+    if 28 <= x < 508 and 58 <= y < 96:
+        colour = chess.BLACK
+        index = (x - 28) // 80
+    elif 28 <= x < 508 and 570 <= y < 608:
+        colour = chess.WHITE
+        index = (x - 28) // 80
+    else:
+        return None
+    if not 0 <= index < len(EDITOR_TRAY):
+        return None
+    return chess.Piece(chess.PIECE_SYMBOLS.index(EDITOR_TRAY[index].lower()), colour)
+
+
+def _apply_editor_drag(
+    board: chess.Board,
+    source_piece: chess.Piece | None,
+    source_square: chess.Square | None,
+    destination: chess.Square | None,
+) -> None:
+    """Apply one tray/board drag without creating a chess move history."""
+    if source_piece is None:
+        return
+    if source_square is not None:
+        board.remove_piece_at(source_square)
+    if destination is not None:
+        board.set_piece_at(destination, source_piece)
+    board.clear_stack()
+    board.castling_rights = chess.BB_EMPTY
+    board.ep_square = None
+
+
+def _draw_editor_tray(view: np.ndarray, colour: chess.Color, y: int) -> None:
+    text_colour = (220, 225, 235) if colour == chess.WHITE else (100, 110, 125)
+    label = "BLACK PIECES — drag onto the board" if colour == chess.BLACK else "WHITE PIECES — drag onto the board"
+    ui._put(view, label, (28, y - 8), text_colour, 0.42)
+    for index, symbol in enumerate(EDITOR_TRAY):
+        left = 28 + index * 80
+        cv2.rectangle(view, (left, y), (left + 70, y + 32), (90, 100, 115), 2)
+        ui._put(view, symbol, (left + 26, y + 25), text_colour, 0.65, 2)
+
+
+def show_position_editor(current: chess.Board) -> chess.Board | None:
+    """Edit an endgame with drag-and-drop trays above and below the board."""
+    board = current.copy(stack=False)
+    window = "Chess Camera - Endgame Position Setup"
+    cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window, 700, 650)
+    drag_piece: chess.Piece | None = None
+    drag_square: chess.Square | None = None
+    buttons = [
+        Button("clear", "CLEAR", 520, 132, 145, 42),
+        Button("turn", "SIDE TO MOVE", 520, 184, 145, 42),
+        Button("cancel", "CANCEL", 520, 500, 145, 42),
+        Button("use", "USE POSITION", 520, 552, 145, 42, active=True),
+    ]
+    queue: list[str] = []
+
+    def mouse(event: int, x: int, y: int, _flags: int, _data: object) -> None:
+        nonlocal drag_piece, drag_square
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drag_piece = _editor_tray_piece(x, y)
+            drag_square = None
+            if drag_piece is None:
+                drag_square = _editor_square_at(x, y)
+                drag_piece = board.piece_at(drag_square) if drag_square is not None else None
+            return
+        if event != cv2.EVENT_LBUTTONUP:
+            return
+        action = pregame_ui.clicked_action(buttons, x, y)
+        if action:
+            queue.append(action)
+            drag_piece = None
+            drag_square = None
+            return
+        _apply_editor_drag(board, drag_piece, drag_square, _editor_square_at(x, y))
+        drag_piece = None
+        drag_square = None
+
+    cv2.setMouseCallback(window, mouse)
+    message = "Drag a tray piece onto a square. Drag a board piece away to remove it."
+    while True:
+        view = np.zeros((650, 700, 3), dtype=np.uint8)
+        view[:] = (28, 31, 37)
+        ui._put(view, "Set up an endgame position", (28, 34), (100, 220, 255), 0.72, 2)
+        _draw_editor_tray(view, chess.BLACK, 64)
+        view[EDITOR_ORIGIN[1]:EDITOR_ORIGIN[1] + EDITOR_SIZE, EDITOR_ORIGIN[0]:EDITOR_ORIGIN[0] + EDITOR_SIZE] = _render_position(board, EDITOR_SIZE)
+        _draw_editor_tray(view, chess.WHITE, 576)
+        for button in buttons:
+            pregame_ui.draw_button(view, button)
+        ui._put(view, "White to move" if board.turn else "Black to move", (520, 258), (120, 255, 170), 0.48)
+        ui._put(view, message[:46], (520, 300), (200, 205, 215), 0.38)
+        cv2.imshow(window, view)
+        action = queue.pop(0) if queue else None
+        key = cv2.waitKey(20) & 0xFF
+        if action == "clear":
+            board.clear()
+            board.turn = chess.WHITE
+            message = "Board cleared. Add both kings before using the position."
+        elif action == "turn":
+            board.turn = not board.turn
+        elif action == "use":
+            if board.is_valid() and len(board.pieces(chess.KING, chess.WHITE)) == 1 and len(board.pieces(chess.KING, chess.BLACK)) == 1:
+                cv2.destroyWindow(window)
+                return board
+            message = "Use one white king, one black king, and a legal position."
+        elif action == "cancel" or key == 27:
+            cv2.destroyWindow(window)
+            return None
+
+
 def _fen_board(value: str) -> tuple[chess.Board | None, str | None]:
     try:
         board = chess.Board(value.strip())
@@ -292,13 +417,14 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
             44,
             enabled=downloaded_directory is not None and source_mode != "downloaded",
         )
-        fen = Button("load_fen", "FEN INPUT...", 640, 218, 140, 44)
-        copy_fen = Button("copy_fen", "COPY FEN", 790, 218, 120, 44)
-        reset = Button("reset", "RESET", 920, 218, 100, 44, enabled=bool(board.move_stack))
-        undo = Button("undo", "BACK MOVE", 1030, 218, 110, 44, enabled=bool(board.move_stack))
-        manage = Button("manage_data", "DATA", 1150, 218, 80, 44)
+        setup = Button("setup", "SET UP BOARD", 640, 218, 160, 44)
+        fen = Button("load_fen", "FEN INPUT...", 810, 218, 140, 44)
+        copy_fen = Button("copy_fen", "COPY FEN", 960, 218, 120, 44)
+        reset = Button("reset", "RESET", 1090, 218, 100, 44, enabled=bool(board.move_stack))
+        undo = Button("undo", "BACK MOVE", 640, 270, 160, 40, enabled=bool(board.move_stack))
+        manage = Button("manage_data", "DATA", 810, 270, 140, 40)
         menu = Button("back", "MAIN MENU", 985, 700, 245, 44)
-        buttons = [choose, downloaded, fen, copy_fen, reset, undo, manage, menu]
+        buttons = [choose, downloaded, setup, fen, copy_fen, reset, undo, manage, menu]
         if probe is not None:
             buttons.extend(_move_buttons(board, probe.moves))
         for button in buttons:
@@ -348,6 +474,12 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
             tablebase_directory, source_mode = _configured_tablebase_directory()
             last_fen = ""
             message = "Tablebase-library status refreshed."
+        elif action == "setup":
+            edited = show_position_editor(board)
+            if edited is not None:
+                board = edited
+                last_fen = ""
+                message = "Using the position from the board setup editor."
         elif action == "load_fen":
             value = app.prompt_for_text(
                 "Endgame position",
