@@ -73,6 +73,7 @@ def bootstrap_runtime() -> Path:
     for folder in (
         "board_profiles",
         "books",
+        "content_library",
         "engines",
         "games",
         "piece_packs",
