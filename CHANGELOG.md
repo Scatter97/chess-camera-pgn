@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.40
+
+Local endgame tablebase release.
+
+- Added **Endgame Explorer** to the main menu.
+- Added local Syzygy tablebase folder selection with persisted configuration.
+- Added FEN loading, exact WDL and DTZ result display, and clickable tablebase root moves.
+- Kept tablebase analysis local and reported unsupported or uncovered positions without failing the app.
+
 ## 0.39.7
 
 Piece appearance and sound release.

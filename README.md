@@ -1,6 +1,6 @@
 # Chess Camera
 
-**Current test release: 0.39.7**
+**Current test release: 0.40**
 
 Chess Camera watches a normal physical chess game through one fixed camera, records legal moves, tracks clock information, and saves the result as a PGN file. It also includes local game history, Stockfish review, Chess960 generation, an opening explorer, board training, illegal-move correction, manual board synchronization, piece themes, and move sounds.
 
@@ -22,6 +22,7 @@ The app is designed for Windows, Debian-based Linux distributions, and macOS. Ca
 - Browse game history, copy PGNs, and delete games with confirmation.
 - Generate any of the 960 legal Chess960 starting positions.
 - Explore opening moves using the included CC0-derived book or another Polyglot `.bin` book.
+- Explore covered endgame positions with a local Syzygy tablebase folder.
 - Save separate board profiles for different boards, pieces, camera positions, and lighting conditions.
 - Improve recognition with guided move training and confirmed-move learning.
 
@@ -33,6 +34,7 @@ Chess Camera opens on a scalable feature-card menu:
 - **Game History**
 - **Chess960 Generator**
 - **Opening Explorer**
+- **Endgame Explorer**
 - **Settings**
 - A reserved card for future features
 - **Exit**
@@ -241,6 +243,12 @@ The Chess960 Generator creates one of the 960 legal starting positions and shows
 ## Opening Explorer
 
 Opening Explorer uses `python-chess` Polyglot support and includes a built-in CC0-derived opening source, automatic generation of `books/chess_camera_default.bin`, optional custom Polyglot books, weighted counts, clickable moves, reset, back move, and current FEN.
+
+### Endgame Explorer
+
+Endgame Explorer uses local Syzygy tablebase files already on your computer. Select a folder containing `.rtbw` and `.rtbz` files, load a legal FEN with up to seven pieces, and browse exact root moves. The explorer displays the result for the side to move and distance to zeroing move (DTZ). No chess positions are sent online.
+
+Tablebase files are intentionally not bundled because larger Syzygy sets require substantial disk space. The app reports when a position is outside the seven-piece limit, has castling rights, or is not covered by the selected files.
 
 ## Prebuilt desktop packages
 

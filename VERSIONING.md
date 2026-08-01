@@ -2,7 +2,7 @@
 
 `version.py` is the single source of truth for the displayed app version.
 
-**Current release: 0.36.1**
+**Current release: 0.40**
 
 ## Feature releases
 
