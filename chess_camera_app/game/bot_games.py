@@ -78,13 +78,14 @@ def _camera_calibration() -> tuple[list[list[float]], str, int] | None:
     return normalized, edge, camera_index
 
 
-def _open_camera_confirmation() -> tuple[CameraConfirmation | None, str]:
+def _open_camera_confirmation(camera_index: int | None = None) -> tuple[CameraConfirmation | None, str]:
     calibration = _camera_calibration()
     if calibration is None:
         return None, "Automatic confirmation needs a saved board calibration."
-    corners, edge, camera_index = calibration
+    corners, edge, saved_camera_index = calibration
+    active_camera_index = saved_camera_index if camera_index is None else camera_index
     try:
-        return CameraConfirmation(app.open_camera(camera_index), corners, edge), "Automatic camera confirmation is on."
+        return CameraConfirmation(app.open_camera(active_camera_index), corners, edge), f"Automatic camera confirmation is on (camera {active_camera_index})."
     except RuntimeError as error:
         return None, str(error)
 
@@ -141,6 +142,7 @@ def show_virtual_bot_game(otb: bool = False) -> None:
     pending_bot: chess.Move | None = None
     camera_confirmation: CameraConfirmation | None = None
     last_camera_board: np.ndarray | None = None
+    camera_index = (_camera_calibration() or ([], "bottom", 0))[2]
     message = "Choose a Stockfish engine in Settings before starting." if engine_path is None else "You are White. Make a move."
     buttons: list[Button] = []
     queue: list[str] = []
@@ -192,11 +194,13 @@ def show_virtual_bot_game(otb: bool = False) -> None:
             46,
             active=camera_confirmation is not None,
         )
+        next_camera = Button("next_camera", f"CAMERA {camera_index}", 900, 286, 125, 46)
         save = Button("save", "SAVE PGN", 635, 660, 170, 48, enabled=bool(board.move_stack))
         back = Button("back", "MAIN MENU", 760, 660, 220, 48)
         buttons = [save, back]
         if otb:
             buttons.append(camera_button)
+            buttons.append(next_camera)
             if pending_bot is not None:
                 buttons.append(confirm)
         for button in buttons:
@@ -259,7 +263,7 @@ def show_virtual_bot_game(otb: bool = False) -> None:
                 camera_confirmation.reset_reference(last_camera_board)
             message = "Bot move recorded. Your turn."
         elif action == "camera_on":
-            camera_confirmation, message = _open_camera_confirmation()
+            camera_confirmation, message = _open_camera_confirmation(camera_index)
             if camera_confirmation is not None:
                 last_camera_board = camera_confirmation.read_board()
                 if last_camera_board is not None:
@@ -270,6 +274,13 @@ def show_virtual_bot_game(otb: bool = False) -> None:
             camera_confirmation = None
             last_camera_board = None
             message = "Automatic camera confirmation is off. Manual confirmation is still available."
+        elif action == "next_camera":
+            if camera_confirmation is not None:
+                camera_confirmation.close()
+                camera_confirmation = None
+            camera_index = (camera_index + 1) % 10
+            last_camera_board = None
+            message = f"Camera set to {camera_index}. Turn Auto Camera on to test it."
         elif action == "save":
             message = _save_bot_game(board, otb)
         elif action == "back" or key == 27:
