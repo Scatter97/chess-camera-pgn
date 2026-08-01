@@ -1,6 +1,6 @@
 import chess
 
-import illegal_correction
+from chess_camera_app.game import illegal_correction
 
 
 def test_virtual_square_mapping() -> None:

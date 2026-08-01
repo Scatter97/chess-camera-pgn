@@ -4,7 +4,7 @@ import chess
 import cv2
 import numpy as np
 
-import piece_theme_system
+from chess_camera_app.ui import piece_theme_system
 
 
 def _redirect_assets(monkeypatch, tmp_path: Path) -> None:

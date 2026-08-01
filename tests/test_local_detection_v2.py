@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import chess
 import numpy as np
 
-import local_detection
-import local_detection_v2 as v2
-from chess_tracker import BOARD_MARGIN_PIXELS, SQUARE_PIXELS
+from chess_camera_app.detection import local_detection
+from chess_camera_app.detection import local_detection_v2 as v2
+from chess_camera_app.game.chess_tracker import BOARD_MARGIN_PIXELS, SQUARE_PIXELS
 
 
 def _frame() -> np.ndarray:

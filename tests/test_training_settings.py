@@ -1,7 +1,7 @@
 import chess
 
-from board_profiles import BoardProfile
-from training_settings import profile_snapshot, restore_profile
+from chess_camera_app.calibration.board_profiles import BoardProfile
+from chess_camera_app.ui.training_settings import profile_snapshot, restore_profile
 
 
 def test_restore_profile_removes_undone_training_sample() -> None:

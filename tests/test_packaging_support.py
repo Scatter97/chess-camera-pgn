@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import runtime_paths
+from chess_camera_app.runtime import runtime_paths
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,7 +33,7 @@ def test_frozen_source_builder_includes_multi_move_runtime_patch() -> None:
     builder = (ROOT / "packaging/prepare_frozen_sources.py").read_text(
         encoding="utf-8"
     )
-    assert "from runtime_multi_move_patch import apply_source_patches" in builder
+    assert "from chess_camera_app.runtime.runtime_multi_move_patch import apply_source_patches" in builder
     assert "_RUNTIME_MULTI_MOVE_PATCHED = True" in builder
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import chess
 
-from review_ui_fix import board_after_selected_move
+from chess_camera_app.ui.review_ui_fix import board_after_selected_move
 
 
 def test_review_board_includes_selected_move() -> None:

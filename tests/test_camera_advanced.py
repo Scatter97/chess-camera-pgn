@@ -6,7 +6,7 @@ import time
 
 import numpy as np
 
-import camera_advanced
+from chess_camera_app.calibration import camera_advanced
 
 
 def test_normalized_settings_loads_saved_values(tmp_path) -> None:

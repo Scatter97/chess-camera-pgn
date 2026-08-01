@@ -18,7 +18,7 @@ fi
 .venv-build/bin/python packaging/generate_icons.py
 .venv-build/bin/python -m PyInstaller --noconfirm --clean packaging/ChessCamera.spec
 
-VERSION="$(.venv-build/bin/python -c 'from version import APP_VERSION; print(APP_VERSION)')"
+VERSION="$(.venv-build/bin/python -c 'from chess_camera_app.core.version import APP_VERSION; print(APP_VERSION)')"
 APP_PATH="dist/ChessCamera.app"
 if [[ ! -d "$APP_PATH" ]]; then
     echo "PyInstaller did not create $APP_PATH" >&2

@@ -26,7 +26,7 @@ if errorlevel 1 exit /b 1
 .venv-build\Scripts\python.exe -m PyInstaller --noconfirm --clean packaging\ChessCamera.spec
 if errorlevel 1 exit /b 1
 
-for /f %%i in ('.venv-build\Scripts\python.exe -c "from version import APP_VERSION; print(APP_VERSION)"') do set APP_VERSION=%%i
+for /f %%i in ('.venv-build\Scripts\python.exe -c "from chess_camera_app.core.version import APP_VERSION; print(APP_VERSION)"') do set APP_VERSION=%%i
 copy README.md dist\ChessCamera\README.md >nul
 powershell -NoProfile -Command "Compress-Archive -Path 'dist\ChessCamera\*' -DestinationPath 'release\ChessCamera-%APP_VERSION%-Windows-x64.zip' -Force"
 if errorlevel 1 exit /b 1

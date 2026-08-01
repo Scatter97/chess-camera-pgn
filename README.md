@@ -33,7 +33,26 @@ The application is designed for Windows, Debian-based Linux distributions, and m
 - **Settings**
 - **Exit**
 
-The displayed version is read from `version.py`.
+The displayed version is read from `chess_camera_app/core/version.py`.
+
+## Project layout
+
+The root contains the launcher, packaging files, documentation, tests, and
+build scripts. Application code is grouped in `chess_camera_app/`:
+
+```text
+chess_camera_app/
+├── analysis/       Stockfish, opening, endgame, and Chess960 tools
+├── calibration/    Board and camera calibration
+├── content/        Downloadable opening and tablebase data
+├── core/           App state, navigation, and version information
+├── detection/      Camera, OCR, Local64, and square detection
+├── game/           PGN, clocks, rules, corrections, and recovery
+├── runtime/        Runtime patching and user-data paths
+└── ui/             Setup, settings, history, and visual themes
+```
+
+Run the app exactly as before with `python chess_camera.py`.
 
 ## Recording workflow
 
@@ -285,18 +304,14 @@ The default optional library is under `content_library/` inside that location. D
 ## Important files
 
 - `chess_camera.py` — application entry point and main menu
-- `app.py` — camera game loop, clocks, move confirmation, and PGN recording
-- `chess_tracker.py` — square changes and legal-move ranking
-- `content_library.py` — package storage, downloads, resume, integrity, activation, and removal
-- `content_manager_ui.py` — in-app Data and Libraries interface
-- `opening_book_builder.py` — TSV/PGN/UCI to Polyglot conversion
-- `opening_explorer.py` — built-in, downloaded, and custom opening books
-- `endgame_explorer.py` — downloaded and custom local Syzygy probing
-- `runtime_paths.py` — writable package data folders
-- `feature_settings.py` — advanced detection and appearance settings
-- `game_history.py` and `game_analysis.py` — history and UCI-engine review
-- `manual_board_sync.py` and `illegal_correction.py` — correction tools
-- `version.py` — application version
+- `chess_camera_app/core/app.py` — camera game loop, clocks, move confirmation, and PGN recording
+- `chess_camera_app/detection/` — square changes, camera input, OCR, and Local64 detection
+- `chess_camera_app/content/` — package storage, downloads, and the Data and Libraries interface
+- `chess_camera_app/analysis/` — Polyglot conversion, opening/endgame tools, and UCI-engine review
+- `chess_camera_app/runtime/` — runtime patches and writable package data folders
+- `chess_camera_app/ui/` — advanced settings, history, and visual presentation
+- `chess_camera_app/game/` — PGN tracking, clocks, corrections, and synchronization
+- `chess_camera_app/core/version.py` — application version
 - `CHANGELOG.md` — release history
 - `CONTENT_LIBRARY.md` — optional data architecture and test plan
 - `packaging/` — Windows, Debian, and macOS builds

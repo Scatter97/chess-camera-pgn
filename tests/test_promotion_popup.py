@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import promotion_popup
+from chess_camera_app.game import promotion_popup
 
 
 def test_inline_promotion_actions_are_hidden() -> None:

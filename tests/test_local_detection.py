@@ -6,8 +6,8 @@ import time
 import chess
 import numpy as np
 
-import local_detection
-from chess_tracker import RankedMove, move_changed_squares
+from chess_camera_app.detection import local_detection
+from chess_camera_app.game.chess_tracker import RankedMove, move_changed_squares
 
 
 def reset_state() -> None:

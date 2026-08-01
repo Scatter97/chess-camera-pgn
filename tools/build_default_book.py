@@ -7,7 +7,7 @@ from pathlib import Path
 
 import chess.pgn
 
-from opening_book_builder import build_polyglot_book
+from chess_camera_app.analysis.opening_book_builder import build_polyglot_book
 
 
 DATASET_FILES = ("a.tsv", "b.tsv", "c.tsv", "d.tsv", "e.tsv")

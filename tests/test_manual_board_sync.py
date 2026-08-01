@@ -1,6 +1,6 @@
 import chess
 
-import manual_board_sync
+from chess_camera_app.game import manual_board_sync
 
 
 def test_manual_sync_applies_legal_drag() -> None:

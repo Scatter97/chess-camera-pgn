@@ -3,8 +3,8 @@ from __future__ import annotations
 import chess
 import numpy as np
 
-import local_detection
-import local_detection_runtime
+from chess_camera_app.detection import local_detection
+from chess_camera_app.detection import local_detection_runtime
 
 
 def test_stable_move_requires_both_origin_and_destination() -> None:
