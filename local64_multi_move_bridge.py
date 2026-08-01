@@ -52,6 +52,7 @@ def install(module: ModuleType) -> None:
         runtime = local_detection_v2.RUNTIME
         if (
             not local_detection.STATE.enabled
+            or runtime.board is None
             or runtime.reference_frame is None
             or runtime.latest_frame is None
             or not runtime.snapshots
