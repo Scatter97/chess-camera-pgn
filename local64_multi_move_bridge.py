@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import ModuleType
-from typing import Iterable
+from typing import Callable, Iterable
 
 import chess
 
@@ -9,11 +9,39 @@ import local_detection
 import local_detection_v2
 
 
+def _closure_value(function: object, name: str) -> object | None:
+    """Read one named closure value without depending on a wrapper type."""
+    code = getattr(function, "__code__", None)
+    closure = getattr(function, "__closure__", None)
+    if code is None or not closure:
+        return None
+    for variable, cell in zip(code.co_freevars, closure):
+        if variable != name:
+            continue
+        try:
+            return cell.cell_contents
+        except ValueError:
+            return None
+    return None
+
+
+def _unwrap_generic_bridge(module: ModuleType) -> Callable[..., object]:
+    """Return the real recovery search if the early V2 wrapper was installed."""
+    current = module.search_sequences
+    if getattr(module, "_local_detection_v2_installed", False):
+        original = _closure_value(current, "original_search")
+        if callable(original):
+            module.search_sequences = original
+            module._local_detection_v2_installed = False
+            return original
+    return current
+
+
 def install(module: ModuleType) -> None:
     """Feed trustworthy V2 timeline evidence into multi-move recovery."""
     if getattr(module, "_local64_v2_bridge_installed", False):
         return
-    original_search = module.search_sequences
+    original_search = _unwrap_generic_bridge(module)
 
     def search_sequences(
         board: chess.Board,
