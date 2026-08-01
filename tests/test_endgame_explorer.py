@@ -14,12 +14,6 @@ class _FakeTablebase:
     def probe_dtz(self, board: chess.Board) -> int:
         return 7
 
-    def probe_root(self, board: chess.Board) -> list[tuple[chess.Move, int, int]]:
-        return [
-            (chess.Move.from_uci("e2e3"), 2, 7),
-            (chess.Move.from_uci("e2e4"), 1, 2),
-        ]
-
 
 def test_tablebase_folder_requires_syzygy_files(tmp_path: Path) -> None:
     assert explorer._contains_tablebase_files(tmp_path) is False
@@ -47,14 +41,15 @@ def test_candidate_position_rejects_castling_and_eight_pieces() -> None:
     assert message == "Syzygy tablebases do not cover positions with castling rights."
 
 
-def test_probe_position_normalizes_and_orders_root_moves() -> None:
+def test_probe_position_derives_root_moves_without_probe_root() -> None:
     board = chess.Board("8/8/8/8/8/8/4K3/7k w - - 0 1")
 
     result = explorer.probe_position(_FakeTablebase(), board)
 
     assert result.wdl == 2
     assert result.dtz == 7
-    assert [item.move.uci() for item in result.moves] == ["e2e3", "e2e4"]
+    assert result.moves
+    assert all(item.wdl == -2 for item in result.moves)
 
 
 def test_fen_loading_rejects_invalid_positions() -> None:
