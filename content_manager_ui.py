@@ -162,6 +162,20 @@ def _run_with_progress(
         dialog.close()
 
 
+def _package_primary_button(
+    action: str,
+    installed: bool,
+    missing_label: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> Button:
+    if installed:
+        return Button(action, "INSTALLED", x, y, width, height, enabled=False)
+    return Button(action, missing_label, x, y, width, height)
+
+
 def show_content_manager(app_module: ModuleType, navigation_module: ModuleType) -> None:
     config_path = app_module.CONFIG_PATH
     queue: list[str] = []
@@ -254,9 +268,10 @@ def show_content_manager(app_module: ModuleType, navigation_module: ModuleType) 
             (120, 255, 170) if opening_path else (180, 190, 205),
             0.54,
         )
-        opening_install = Button(
+        opening_install = _package_primary_button(
             "opening_install",
-            "DOWNLOAD / UPDATE" if opening_path else "DOWNLOAD",
+            opening_path is not None,
+            "DOWNLOAD",
             600,
             202,
             190,
@@ -333,9 +348,10 @@ def show_content_manager(app_module: ModuleType, navigation_module: ModuleType) 
             (120, 255, 170) if tablebase_path else (180, 190, 205),
             0.54,
         )
-        tablebase_install = Button(
+        tablebase_install = _package_primary_button(
             "tablebase_install",
-            "DOWNLOAD / RESUME" if tablebase_path else "DOWNLOAD (~1 GB)",
+            tablebase_path is not None,
+            "DOWNLOAD (~1 GB)",
             600,
             425,
             190,
@@ -466,11 +482,17 @@ def show_content_manager(app_module: ModuleType, navigation_module: ModuleType) 
                 cv2.setMouseCallback(MANAGER_WINDOW, mouse)
                 message = error or f"Tablebases installed in {result}"
         elif action == "tablebase_activate":
-            message = (
-                "Downloaded Syzygy tablebases selected."
-                if content_library.activate_downloaded_tablebase(config_path)
-                else "The downloaded tablebase package could not be found."
-            )
+            if content_library.activate_downloaded_tablebase(config_path):
+                cv2.destroyWindow(MANAGER_WINDOW)
+                import endgame_explorer
+
+                endgame_explorer.show_endgame_explorer()
+                cv2.namedWindow(MANAGER_WINDOW, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(MANAGER_WINDOW, 1060, 760)
+                cv2.setMouseCallback(MANAGER_WINDOW, mouse)
+                message = "Returned from Endgame Explorer."
+            else:
+                message = "The downloaded tablebase package could not be found."
         elif action == "tablebase_verify":
             cv2.destroyWindow(MANAGER_WINDOW)
             result, error = _run_with_progress(

@@ -22,6 +22,8 @@ WINDOW_NAME = "Chess Camera - Endgame Explorer"
 MAX_TABLEBASE_PIECES = 7
 MAX_VISIBLE_MOVES = 9
 TABLEBASE_EXTENSIONS = ("*.rtbw", "*.rtbz")
+LAST_ENDGAME_FEN_KEY = "last_endgame_explorer_fen"
+DEFAULT_ENDGAME_FEN = "7k/8/8/8/8/8/4K3/5Q2 w - - 0 1"
 
 
 @dataclass(frozen=True)
@@ -166,6 +168,36 @@ def _fen_board(value: str) -> tuple[chess.Board | None, str | None]:
     return board, None
 
 
+def _load_starting_board(initial_fen: str | None = None) -> tuple[chess.Board, str]:
+    """Use an incoming or remembered endgame FEN instead of the full starting board."""
+    candidates: list[tuple[str, str]] = []
+    if initial_fen:
+        candidates.append((initial_fen, "Loaded the selected endgame position."))
+
+    data = content_library._load_config(app.CONFIG_PATH)
+    saved_fen = data.get(LAST_ENDGAME_FEN_KEY)
+    if isinstance(saved_fen, str) and saved_fen.strip():
+        candidates.append((saved_fen, "Restored the last Endgame Explorer position."))
+
+    candidates.append((
+        DEFAULT_ENDGAME_FEN,
+        "Loaded a sample tablebase endgame. Use LOAD FEN for another position.",
+    ))
+
+    for fen, message in candidates:
+        board, error = _fen_board(fen)
+        if board is not None:
+            return board, message
+
+    return chess.Board(DEFAULT_ENDGAME_FEN), "Loaded a sample tablebase endgame."
+
+
+def _save_last_fen(board: chess.Board) -> None:
+    data = content_library._load_config(app.CONFIG_PATH)
+    data[LAST_ENDGAME_FEN_KEY] = board.fen()
+    content_library._save_config(app.CONFIG_PATH, data)
+
+
 def _move_buttons(
     board: chess.Board,
     moves: Iterable[TablebaseMove],
@@ -185,12 +217,9 @@ def _move_buttons(
     return buttons
 
 
-def show_endgame_explorer() -> None:
-    board = chess.Board()
+def show_endgame_explorer(initial_fen: str | None = None) -> None:
+    board, message = _load_starting_board(initial_fen)
     tablebase_directory, source_mode = _configured_tablebase_directory()
-    message = (
-        "Load a FEN with up to seven pieces. Downloaded 3/4/5-piece data works offline."
-    )
     last_fen = ""
     probe: TablebaseProbe | None = None
     buttons: list[Button] = []
@@ -210,6 +239,7 @@ def show_endgame_explorer() -> None:
     while True:
         current_fen = board.fen()
         if current_fen != last_fen:
+            _save_last_fen(board)
             probe, probe_message = _probe_directory(tablebase_directory, board)
             if probe_message is not None:
                 message = probe_message
@@ -323,7 +353,7 @@ def show_endgame_explorer() -> None:
                     board = loaded
                     last_fen = ""
         elif action == "reset":
-            board.reset()
+            board = chess.Board(DEFAULT_ENDGAME_FEN)
             last_fen = ""
         elif action == "undo":
             if board.move_stack:
