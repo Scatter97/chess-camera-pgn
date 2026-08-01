@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.41
+
+Downloadable chess knowledge release.
+
+- Added **Settings → Data and Libraries** for optional chess data after installation.
+- Added a downloadable expanded opening package based on the pinned CC0 Lichess opening-name dataset.
+- Added local conversion of downloaded PGN opening lines into a Polyglot book.
+- Added built-in, downloaded, and custom opening-book modes in Opening Explorer.
+- Added an optional approximately 939 MB Syzygy 3/4/5-piece WDL and DTZ package from the Lichess tablebase mirror.
+- Preserved custom Syzygy folder support for user-provided six- and seven-piece collections.
+- Added resumable HTTP Range downloads, cancellation, configurable storage, activation, verification, and removal controls.
+- Added pinned Git blob verification for opening source files and locally recorded SHA-256 checksums for installed packages.
+- Kept all large opening and tablebase files outside Git and outside the default Windows, Debian, and macOS installers.
+- Added automated tests for PGN/TSV conversion, package configuration, trusted download hosts, pinned opening-source verification, and tablebase index discovery.
+
 ## 0.40
 
 Local endgame tablebase release.
