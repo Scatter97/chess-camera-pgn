@@ -4,9 +4,9 @@ from pathlib import Path
 
 import chess
 
-import multi_move_recovery as recovery
-import runtime_multi_move_patch
-from chess_tracker import move_changed_squares
+from chess_camera_app.game import multi_move_recovery as recovery
+from chess_camera_app.runtime import runtime_multi_move_patch
+from chess_camera_app.game.chess_tracker import move_changed_squares
 
 
 def _scores(*active: chess.Square) -> dict[chess.Square, float]:
@@ -130,12 +130,12 @@ def test_settings_are_clamped_and_round_trip(tmp_path: Path) -> None:
 
 
 def test_experimental_runtime_patch_compiles() -> None:
-    source = Path("app.py").read_text(encoding="utf-8")
+    source = Path("chess_camera_app/core/app.py").read_text(encoding="utf-8")
     patched = runtime_multi_move_patch.apply_source_patches(source)
 
     assert "multi_move_ui.search_sequences" in patched
     assert "multi_move_history.observe" in patched
-    compile(patched, "app.py", "exec")
+    compile(patched, "chess_camera_app/core/app.py", "exec")
 
 
 def test_experimental_startup_isolated_from_stable_runtime() -> None:

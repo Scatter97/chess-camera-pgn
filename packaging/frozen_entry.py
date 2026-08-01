@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from runtime_paths import bootstrap_runtime
+from chess_camera_app.runtime.runtime_paths import bootstrap_runtime
 
 
 # The installed app uses platform-standard writable data folders before any

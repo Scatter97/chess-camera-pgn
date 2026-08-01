@@ -8,8 +8,8 @@ from pathlib import Path
 import chess
 import chess.polyglot
 
-import content_library
-from opening_book_builder import build_polyglot_book_from_tsvs
+from chess_camera_app.content import content_library
+from chess_camera_app.analysis.opening_book_builder import build_polyglot_book_from_tsvs
 
 
 class _FakeResponse:
@@ -148,7 +148,7 @@ def test_tablebase_index_rejects_nested_and_unexpected_links(monkeypatch) -> Non
 
 def test_release_wires_data_manager_and_version() -> None:
     startup = Path("chess_camera.py").read_text(encoding="utf-8")
-    version = Path("version.py").read_text(encoding="utf-8")
+    version = Path("chess_camera_app/core/version.py").read_text(encoding="utf-8")
 
     assert "content_manager_ui.install(app, navigation)" in startup
     assert 'APP_VERSION = "0.41.1"' in version

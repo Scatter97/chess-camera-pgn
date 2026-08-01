@@ -8,8 +8,8 @@ import chess.pgn
 import cv2
 import numpy as np
 
-from board_profiles import BoardProfile, BoardProfileStore
-from app import (
+from chess_camera_app.calibration.board_profiles import BoardProfile, BoardProfileStore
+from chess_camera_app.core.app import (
     apply_setup_suggestion,
     apply_midgame_clock_adjustment,
     detection_profile,
@@ -32,8 +32,8 @@ from app import (
     select_camera_backend,
     select_promotion_candidate,
 )
-from builtin_clock import BuiltInChessClock, ClockSettings, ManualClockController
-from clock_reader import (
+from chess_camera_app.game.builtin_clock import BuiltInChessClock, ClockSettings, ManualClockController
+from chess_camera_app.detection.clock_reader import (
     BackgroundClockReader,
     BothClocks,
     ClockReading,
@@ -41,7 +41,7 @@ from clock_reader import (
     format_pgn_clock,
     parse_clock_text,
 )
-from chess_tracker import (
+from chess_camera_app.game.chess_tracker import (
     BOARD_MARGIN_PIXELS,
     RankedMove,
     WARP_PIXELS,
@@ -57,8 +57,8 @@ from chess_tracker import (
     warp_board,
     write_pgn,
 )
-from game_rules import automatic_outcome, claimable_draw_reason, timeout_outcome
-from game_analysis import (
+from chess_camera_app.game.game_rules import automatic_outcome, claimable_draw_reason, timeout_outcome
+from chess_camera_app.analysis.game_analysis import (
     PositionEvaluation,
     build_game_review,
     classify_move,
@@ -67,7 +67,7 @@ from game_analysis import (
     probe_uci_engine,
     save_analysis_report,
 )
-from pregame_ui import (
+from chess_camera_app.ui.pregame_ui import (
     Button,
     DEFAULT_PINNED_TIME_CONTROLS,
     GameSetup,
@@ -1033,7 +1033,7 @@ def test_selected_uci_engine_is_probed_for_name(tmp_path: Path) -> None:
 def test_selected_engine_path_is_saved_in_config(
     tmp_path: Path, monkeypatch: object
 ) -> None:
-    import app as app_module
+    from chess_camera_app.core import app as app_module
 
     config_path = tmp_path / "camera_config.json"
     monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]
@@ -1054,7 +1054,7 @@ def test_selected_engine_path_is_saved_in_config(
 def test_pinned_time_controls_are_saved_in_config(
     tmp_path: Path, monkeypatch: object
 ) -> None:
-    import app as app_module
+    from chess_camera_app.core import app as app_module
 
     config_path = tmp_path / "camera_config.json"
     monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]
@@ -1073,7 +1073,7 @@ def test_pinned_time_controls_are_saved_in_config(
 def test_player_and_event_suggestions_are_saved_in_config(
     tmp_path: Path, monkeypatch: object
 ) -> None:
-    import app as app_module
+    from chess_camera_app.core import app as app_module
 
     config_path = tmp_path / "camera_config.json"
     monkeypatch.setattr(app_module, "CONFIG_PATH", config_path)  # type: ignore[attr-defined]

@@ -3,32 +3,32 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
-import app
-import app_navigation as navigation
-import calibration_cleanup
-import calibration_ui
-import camera_advanced
-import chess960_generator
-import content_manager_ui
-import endgame_explorer
-import feature_settings
-import game_history
-import game_session
-import local64_occlusion_fix
-import local_detection
-import local_detection_runtime
-import multi_move_settings
-import opening_explorer
-import piece_theme_system
-import pregame_ui
-import promotion_popup
-import review_ui_fix
-import runtime_0397_patch
-import runtime_multi_move_patch
-import training_settings
-import ui_support as ui
-from pregame_ui import Button
-from version import APP_VERSION, VERSION_LABEL
+from chess_camera_app.core import app
+from chess_camera_app.core import app_navigation as navigation
+from chess_camera_app.calibration import calibration_cleanup
+from chess_camera_app.calibration import calibration_ui
+from chess_camera_app.calibration import camera_advanced
+from chess_camera_app.analysis import chess960_generator
+from chess_camera_app.content import content_manager_ui
+from chess_camera_app.analysis import endgame_explorer
+from chess_camera_app.ui import feature_settings
+from chess_camera_app.ui import game_history
+from chess_camera_app.game import game_session
+from chess_camera_app.detection import local64_occlusion_fix
+from chess_camera_app.detection import local_detection
+from chess_camera_app.detection import local_detection_runtime
+from chess_camera_app.ui import multi_move_settings
+from chess_camera_app.analysis import opening_explorer
+from chess_camera_app.ui import piece_theme_system
+from chess_camera_app.ui import pregame_ui
+from chess_camera_app.game import promotion_popup
+from chess_camera_app.ui import review_ui_fix
+from chess_camera_app.runtime import runtime_0397_patch
+from chess_camera_app.runtime import runtime_multi_move_patch
+from chess_camera_app.ui import training_settings
+from chess_camera_app.ui import ui_support as ui
+from chess_camera_app.ui.pregame_ui import Button
+from chess_camera_app.core.version import APP_VERSION, VERSION_LABEL
 
 
 CAMERA_CONFIG_KEYS = (

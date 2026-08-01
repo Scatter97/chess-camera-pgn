@@ -4,7 +4,7 @@ from pathlib import Path
 
 import chess
 
-import endgame_explorer as explorer
+from chess_camera_app.analysis import endgame_explorer as explorer
 
 
 class _FakeTablebase:

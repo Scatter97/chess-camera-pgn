@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import feature_settings
+from chess_camera_app.ui import feature_settings
 
 
 def test_auto_accept_settings_round_trip(tmp_path: Path) -> None:

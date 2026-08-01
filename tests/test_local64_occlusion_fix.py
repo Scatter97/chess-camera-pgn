@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import chess
 
-import local64_occlusion_fix
-import local_detection
-import local_detection_runtime
+from chess_camera_app.detection import local64_occlusion_fix
+from chess_camera_app.detection import local_detection
+from chess_camera_app.detection import local_detection_runtime
 
 
 def _scores() -> dict[chess.Square, float]:

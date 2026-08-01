@@ -3,9 +3,9 @@ from pathlib import Path
 import chess
 import pytest
 
-from board_profiles import BoardProfile
-from builtin_clock import BuiltInChessClock, ClockSettings
-from training_settings import profile_snapshot, restore_profile
+from chess_camera_app.calibration.board_profiles import BoardProfile
+from chess_camera_app.game.builtin_clock import BuiltInChessClock, ClockSettings
+from chess_camera_app.ui.training_settings import profile_snapshot, restore_profile
 
 
 def _move_scores() -> dict[chess.Square, float]:

@@ -4,14 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/0.39-reliability
+      - main
     paths:
-      - "app.py"
+      - "chess_camera_app/**"
       - "chess_camera.py"
-      - "runtime_app_patch.py"
-      - "runtime_paths.py"
       - "requirements.txt"
-      - "version.py"
       - "books/**"
       - "packaging/**"
       - "build_windows_exe.bat"
@@ -20,12 +17,9 @@ on:
     branches:
       - main
     paths:
-      - "app.py"
+      - "chess_camera_app/**"
       - "chess_camera.py"
-      - "runtime_app_patch.py"
-      - "runtime_paths.py"
       - "requirements.txt"
-      - "version.py"
       - "books/**"
       - "packaging/**"
       - "build_windows_exe.bat"
