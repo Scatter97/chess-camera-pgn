@@ -11,6 +11,8 @@ import numpy as np
 
 import app
 import app_navigation as navigation
+import content_library
+import content_manager_ui
 import pregame_ui
 import ui_support as ui
 from pregame_ui import Button
@@ -18,7 +20,7 @@ from pregame_ui import Button
 
 WINDOW_NAME = "Chess Camera - Endgame Explorer"
 MAX_TABLEBASE_PIECES = 7
-MAX_VISIBLE_MOVES = 10
+MAX_VISIBLE_MOVES = 9
 TABLEBASE_EXTENSIONS = ("*.rtbw", "*.rtbz")
 
 
@@ -36,18 +38,12 @@ class TablebaseProbe:
     moves: tuple[TablebaseMove, ...]
 
 
-def _configured_tablebase_directory() -> Path | None:
-    configured = navigation._config().get("endgame_tablebase_path")
-    if not isinstance(configured, str) or not configured.strip():
-        return None
-    path = Path(configured)
-    return path if path.is_dir() else None
+def _configured_tablebase_directory() -> tuple[Path | None, str]:
+    return content_library.active_tablebase_directory(app.CONFIG_PATH)
 
 
 def _save_tablebase_directory(directory: Path) -> None:
-    data = navigation._config()
-    data["endgame_tablebase_path"] = str(directory)
-    navigation._save_config(data)
+    content_library.activate_custom_tablebase(app.CONFIG_PATH, directory)
 
 
 def _contains_tablebase_files(directory: Path) -> bool:
@@ -133,7 +129,7 @@ def _probe_directory(
     board: chess.Board,
 ) -> tuple[TablebaseProbe | None, str | None]:
     if directory is None:
-        return None, "Choose a folder containing Syzygy tablebase files."
+        return None, "Choose a custom folder or download tablebases in Data Manager."
     covered, message = _position_is_covered_candidate(board)
     if not covered:
         return None, message
@@ -141,7 +137,7 @@ def _probe_directory(
         with chess.syzygy.open_tablebase(str(directory)) as tablebase:
             return probe_position(tablebase, board), None
     except Exception as error:
-        return None, f"This position is not covered by the selected tablebase: {error}"
+        return None, f"This position is not covered by the active tablebase: {error}"
 
 
 def _wdl_label(wdl: int) -> str:
@@ -183,14 +179,18 @@ def _move_buttons(
         except ValueError:
             continue
         label = f"{san}  {_wdl_label(item.wdl)}  DTZ {item.dtz:+d}"
-        buttons.append(Button(f"move:{item.move.uci()}", label, 640, 356 + index * 38, 575, 32))
+        buttons.append(
+            Button(f"move:{item.move.uci()}", label, 640, 390 + index * 36, 575, 30)
+        )
     return buttons
 
 
 def show_endgame_explorer() -> None:
     board = chess.Board()
-    tablebase_directory = _configured_tablebase_directory()
-    message = "Load a FEN with up to seven pieces, then choose a tablebase folder."
+    tablebase_directory, source_mode = _configured_tablebase_directory()
+    message = (
+        "Load a FEN with up to seven pieces. Downloaded 3/4/5-piece data works offline."
+    )
     last_fen = ""
     probe: TablebaseProbe | None = None
     buttons: list[Button] = []
@@ -214,24 +214,32 @@ def show_endgame_explorer() -> None:
             if probe_message is not None:
                 message = probe_message
             elif probe is not None:
-                message = "Exact tablebase result for the side to move."
+                message = "Exact local tablebase result for the side to move."
             last_fen = current_fen
 
+        downloaded_directory = content_library.downloaded_tablebase_directory(
+            app.CONFIG_PATH
+        )
         view = np.zeros((780, 1280, 3), dtype=np.uint8)
         view[:] = (28, 31, 37)
         ui._put(view, "Endgame Explorer", (38, 52), (100, 220, 255), 0.95, 2)
         ui._put(
             view,
-            "Explore local Syzygy tablebases without sending positions online.",
+            "Explore downloaded or custom Syzygy tablebases without sending positions online.",
             (40, 83),
             (165, 175, 190),
-            0.50,
+            0.48,
         )
         view[120:680, 35:595] = _render_position(board)
 
-        folder_name = tablebase_directory.name if tablebase_directory else "No folder selected"
-        ui._put(view, "TABLEBASE FOLDER", (640, 122), (165, 175, 190), 0.46)
-        ui._put(view, folder_name[:48], (640, 154), (120, 255, 170), 0.58)
+        if tablebase_directory is None:
+            folder_name = "No tablebase active"
+        elif source_mode == "downloaded":
+            folder_name = f"Downloaded: {tablebase_directory.name}"
+        else:
+            folder_name = f"Custom: {tablebase_directory.name}"
+        ui._put(view, "ACTIVE TABLEBASE", (640, 122), (165, 175, 190), 0.46)
+        ui._put(view, folder_name[:50], (640, 154), (120, 255, 170), 0.58)
         ui._put(
             view,
             f"{len(board.piece_map())} pieces | {'White' if board.turn else 'Black'} to move",
@@ -240,42 +248,71 @@ def show_endgame_explorer() -> None:
             0.46,
         )
 
-        choose = Button("choose_folder", "CHOOSE FOLDER...", 985, 112, 245, 44)
-        fen = Button("load_fen", "LOAD FEN...", 640, 218, 180, 44)
-        reset = Button("reset", "RESET", 835, 218, 150, 44, enabled=bool(board.move_stack))
-        undo = Button("undo", "BACK MOVE", 1000, 218, 230, 44, enabled=bool(board.move_stack))
-        menu = Button("back", "MAIN MENU", 985, 690, 245, 44)
-        buttons = [choose, fen, reset, undo, menu]
+        choose = Button("choose_folder", "CHOOSE CUSTOM FOLDER...", 970, 112, 260, 44)
+        downloaded = Button(
+            "use_downloaded",
+            "USE DOWNLOADED",
+            970,
+            164,
+            260,
+            44,
+            enabled=downloaded_directory is not None and source_mode != "downloaded",
+        )
+        fen = Button("load_fen", "LOAD FEN...", 640, 218, 170, 44)
+        reset = Button("reset", "RESET", 825, 218, 130, 44, enabled=bool(board.move_stack))
+        undo = Button("undo", "BACK MOVE", 970, 218, 125, 44, enabled=bool(board.move_stack))
+        manage = Button("manage_data", "DATA", 1110, 218, 120, 44)
+        menu = Button("back", "MAIN MENU", 985, 700, 245, 44)
+        buttons = [choose, downloaded, fen, reset, undo, manage, menu]
         if probe is not None:
             buttons.extend(_move_buttons(board, probe.moves))
         for button in buttons:
             pregame_ui.draw_button(view, button)
 
         if probe is not None:
-            ui._put(view, "TABLEBASE RESULT", (640, 294), (100, 220, 255), 0.54)
-            ui._put(view, _wdl_label(probe.wdl), (640, 330), (120, 255, 170), 0.72, 2)
-            ui._put(view, f"DTZ {probe.dtz:+d}", (810, 330), (210, 215, 225), 0.54)
-            ui._put(view, "ROOT MOVES", (640, 347), (165, 175, 190), 0.44)
+            ui._put(view, "TABLEBASE RESULT", (640, 304), (100, 220, 255), 0.54)
+            ui._put(view, _wdl_label(probe.wdl), (640, 340), (120, 255, 170), 0.72, 2)
+            ui._put(view, f"DTZ {probe.dtz:+d}", (810, 340), (210, 215, 225), 0.54)
+            ui._put(view, "ROOT MOVES", (640, 376), (165, 175, 190), 0.44)
         else:
-            ui._put(view, "TABLEBASE STATUS", (640, 302), (100, 220, 255), 0.54)
-            ui._put(view, message[:78], (640, 340), (210, 215, 225), 0.46)
+            ui._put(view, "TABLEBASE STATUS", (640, 304), (100, 220, 255), 0.54)
+            ui._put(view, message[:78], (640, 342), (210, 215, 225), 0.44)
 
         ui._put(view, "FEN", (40, 718), (165, 175, 190), 0.42)
         ui._put(view, board.fen()[:118], (40, 748), (210, 215, 225), 0.38)
-        ui._put(view, message[:115], (640, 656), (185, 195, 210), 0.40)
+        ui._put(view, message[:115], (640, 670), (185, 195, 210), 0.40)
         cv2.imshow(WINDOW_NAME, view)
 
         key = cv2.waitKey(25) & 0xFF
         action = queue.pop(0) if queue else None
         if action == "choose_folder":
             selected, error = _choose_tablebase_directory(tablebase_directory)
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(WINDOW_NAME, mouse)
             if error:
                 message = error
             elif selected is not None:
                 tablebase_directory = selected
+                source_mode = "custom"
                 _save_tablebase_directory(selected)
                 last_fen = ""
-                message = f"Selected {selected.name}."
+                message = f"Selected custom tablebase folder: {selected.name}."
+        elif action == "use_downloaded":
+            if content_library.activate_downloaded_tablebase(app.CONFIG_PATH):
+                tablebase_directory, source_mode = _configured_tablebase_directory()
+                last_fen = ""
+                message = "Using downloaded 3/4/5-piece Syzygy tablebases."
+            else:
+                message = "The downloaded tablebase package could not be found."
+        elif action == "manage_data":
+            cv2.destroyWindow(WINDOW_NAME)
+            content_manager_ui.show_content_manager(app, navigation)
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(WINDOW_NAME, 1280, 780)
+            cv2.setMouseCallback(WINDOW_NAME, mouse)
+            tablebase_directory, source_mode = _configured_tablebase_directory()
+            last_fen = ""
+            message = "Tablebase-library status refreshed."
         elif action == "load_fen":
             value = app.prompt_for_text("Endgame position", "FEN", board.fen())
             if value is not None:
@@ -289,8 +326,9 @@ def show_endgame_explorer() -> None:
             board.reset()
             last_fen = ""
         elif action == "undo":
-            board.pop()
-            last_fen = ""
+            if board.move_stack:
+                board.pop()
+                last_fen = ""
         elif action and action.startswith("move:"):
             move = chess.Move.from_uci(action.removeprefix("move:"))
             if move in board.legal_moves:
