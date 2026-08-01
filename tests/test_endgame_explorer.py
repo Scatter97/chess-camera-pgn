@@ -62,3 +62,13 @@ def test_fen_loading_rejects_invalid_positions() -> None:
 
     assert board is None
     assert message is not None
+
+
+def test_result_label_reports_the_winning_colour() -> None:
+    white_to_move = chess.Board("8/8/8/8/8/8/4K3/7k w - - 0 1")
+    black_to_move = chess.Board("8/8/8/8/8/8/4K3/7k b - - 0 1")
+
+    assert explorer._result_label(white_to_move, 2) == "WHITE WINS"
+    assert explorer._result_label(white_to_move, -2) == "BLACK WINS"
+    assert explorer._result_label(black_to_move, 2) == "BLACK WINS"
+    assert explorer._result_label(white_to_move, 0) == "DRAW"
