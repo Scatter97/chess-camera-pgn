@@ -67,3 +67,18 @@ def test_result_label_reports_the_winning_colour() -> None:
     assert explorer._result_label(white_to_move, -2) == "BLACK WINS"
     assert explorer._result_label(black_to_move, 2) == "BLACK WINS"
     assert explorer._result_label(white_to_move, 0) == "DRAW"
+
+
+def test_position_editor_drag_places_moves_and_removes_pieces() -> None:
+    board = chess.Board.empty()
+    white_king = chess.Piece(chess.KING, chess.WHITE)
+
+    explorer._apply_editor_drag(board, white_king, None, chess.E1)
+    assert board.piece_at(chess.E1) == white_king
+
+    explorer._apply_editor_drag(board, white_king, chess.E1, chess.E2)
+    assert board.piece_at(chess.E1) is None
+    assert board.piece_at(chess.E2) == white_king
+
+    explorer._apply_editor_drag(board, white_king, chess.E2, None)
+    assert board.piece_at(chess.E2) is None
