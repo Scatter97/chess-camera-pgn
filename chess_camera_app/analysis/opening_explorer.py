@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
 from pathlib import Path
 
 import chess
@@ -22,6 +24,31 @@ BOOK_DIRECTORY = Path("books")
 DEFAULT_BOOK_SOURCE = BOOK_DIRECTORY / "default_openings.tsv"
 DEFAULT_BOOK_PATH = BOOK_DIRECTORY / "chess_camera_default.bin"
 MAX_VISIBLE_MOVES = 9
+
+
+@lru_cache(maxsize=4)
+def _opening_name_lines(source_path: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    path = Path(source_path)
+    if not path.is_file():
+        return ()
+    with path.open("r", encoding="utf-8", newline="") as source:
+        rows = csv.DictReader(source, delimiter="\t")
+        return tuple(
+            (str(row.get("name") or "").strip(), tuple(str(row.get("uci") or "").split()))
+            for row in rows
+            if str(row.get("name") or "").strip() and str(row.get("uci") or "").strip()
+        )
+
+
+def opening_name(board: chess.Board, source_path: Path = DEFAULT_BOOK_SOURCE) -> str | None:
+    """Return the longest matching named line for the current move history."""
+    played = tuple(move.uci() for move in board.move_stack)
+    best: str | None = None
+    best_length = -1
+    for name, line in _opening_name_lines(str(source_path)):
+        if len(line) <= len(played) and played[:len(line)] == line and len(line) > best_length:
+            best, best_length = name, len(line)
+    return best
 
 
 def _ensure_builtin_book() -> tuple[Path | None, str | None]:
@@ -217,6 +244,9 @@ def show_opening_explorer() -> None:
             (210, 215, 225),
             0.46,
         )
+        name = opening_name(board)
+        ui._put(view, "OPENING", (640, 212), (165, 175, 190), 0.42)
+        ui._put(view, (name or "Unnamed position")[:52], (730, 212), (255, 220, 120), 0.46)
 
         choose = Button("choose_book", "CHOOSE CUSTOM BOOK...", 985, 112, 245, 44)
         builtin = Button(
