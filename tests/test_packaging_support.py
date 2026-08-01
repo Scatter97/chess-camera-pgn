@@ -29,6 +29,14 @@ def test_frozen_entry_uses_writable_runtime_and_prepatched_app() -> None:
     assert 'sys.modules["app"] = app' in entry
 
 
+def test_frozen_source_builder_includes_multi_move_runtime_patch() -> None:
+    builder = (ROOT / "packaging/prepare_frozen_sources.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from runtime_multi_move_patch import apply_source_patches" in builder
+    assert "_RUNTIME_MULTI_MOVE_PATCHED = True" in builder
+
+
 def test_pyinstaller_spec_includes_camera_permission_and_ocr_data() -> None:
     spec = (ROOT / "packaging/ChessCamera.spec").read_text(encoding="utf-8")
     assert 'collect_data_files("rapidocr")' in spec
