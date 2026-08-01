@@ -3,6 +3,7 @@ from __future__ import annotations
 import chess
 import cv2
 import numpy as np
+from datetime import datetime
 
 from chess_camera_app.core import app
 from chess_camera_app.core import app_navigation as navigation
@@ -14,6 +15,30 @@ from chess_camera_app.ui.pregame_ui import Button
 
 WINDOW_NAME = "Chess Camera - Bot Game"
 BOARD_LEFT, BOARD_TOP, BOARD_SIZE = 35, 115, 560
+
+
+def _save_bot_game(board: chess.Board, otb: bool) -> str:
+    """Save a bot game in the normal games folder so History can review it."""
+    moves = list(board.move_stack)
+    if not moves:
+        return "Make at least one move before saving."
+    result = board.result(claim_draw=True) if board.is_game_over(claim_draw=True) else "*"
+    headers = {
+        "Event": "OTB Bot Game" if otb else "Virtual Bot Game",
+        "Site": "Local",
+        "Date": datetime.now().strftime("%Y.%m.%d"),
+        "White": "Player",
+        "Black": "Stockfish",
+        "Result": result,
+        "Termination": "Game over" if result != "*" else "Saved unfinished game",
+    }
+    timestamped = (
+        navigation.GAMES_DIR
+        / (datetime.now().strftime("bot_game_%Y-%m-%d_%H-%M-%S") + ".pgn")
+    )
+    app.write_pgn(moves, app.OUTPUT_PATH, result=result, headers=headers)
+    app.write_pgn(moves, timestamped, result=result, headers=headers)
+    return f"Saved {timestamped.name}."
 
 
 def _square_at(x: int, y: int) -> chess.Square | None:
@@ -72,8 +97,9 @@ def show_virtual_bot_game(otb: bool = False) -> None:
             x, y = BOARD_LEFT + file_index * cell, BOARD_TOP + (7 - rank_index) * cell
             cv2.rectangle(view, (x, y), (x + cell, y + cell), (0, 235, 255), 3)
         confirm = Button("confirm", "CONFIRM PHYSICAL BOT MOVE", 635, 230, 390, 50, active=True)
+        save = Button("save", "SAVE PGN", 635, 660, 170, 48, enabled=bool(board.move_stack))
         back = Button("back", "MAIN MENU", 760, 660, 220, 48)
-        buttons = [back] + ([confirm] if otb and pending_bot is not None else [])
+        buttons = [save, back] + ([confirm] if otb and pending_bot is not None else [])
         for button in buttons:
             pregame_ui.draw_button(view, button)
         ui._put(view, "BOT MOVE" if pending_bot else "YOUR MOVE", (635, 142), (165, 175, 190), 0.46)
@@ -97,6 +123,8 @@ def show_virtual_bot_game(otb: bool = False) -> None:
             board.push(pending_bot)
             pending_bot = None
             message = "Bot move recorded. Your turn."
+        elif action == "save":
+            message = _save_bot_game(board, otb)
         elif action == "back" or key == 27:
             cv2.destroyWindow(WINDOW_NAME)
             return
