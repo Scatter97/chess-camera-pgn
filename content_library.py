@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import shutil
 import time
@@ -11,7 +10,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable
 
 import chess.syzygy
 
@@ -33,13 +32,8 @@ LICHESS_OPENING_SOURCE_BASE = (
     "https://raw.githubusercontent.com/lichess-org/chess-openings/"
     f"{LICHESS_OPENINGS_COMMIT}"
 )
-
-SYZYGY_WDL_INDEX = (
-    "https://tablebase.lichess.ovh/tables/standard/3-4-5-wdl/"
-)
-SYZYGY_DTZ_INDEX = (
-    "https://tablebase.lichess.ovh/tables/standard/3-4-5-dtz/"
-)
+SYZYGY_WDL_INDEX = "https://tablebase.lichess.ovh/tables/standard/3-4-5-wdl/"
+SYZYGY_DTZ_INDEX = "https://tablebase.lichess.ovh/tables/standard/3-4-5-dtz/"
 
 ALLOWED_DOWNLOAD_HOSTS = {
     "raw.githubusercontent.com",
@@ -48,6 +42,7 @@ ALLOWED_DOWNLOAD_HOSTS = {
 USER_AGENT = "ChessCamera/0.41 (+https://github.com/Scatter97/chess-camera-pgn)"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 MIN_TABLEBASE_FREE_BYTES = 1_250_000_000
+TABLEBASE_FILENAME = re.compile(r"^[A-Za-z0-9]+v[A-Za-z0-9]+\.rtb[zw]$")
 
 
 class ContentLibraryError(RuntimeError):
@@ -146,8 +141,10 @@ def opening_package_directory(config_path: Path) -> Path:
 
 
 def downloaded_opening_book(config_path: Path) -> Path | None:
-    candidate = opening_package_directory(config_path) / "lichess_opening_names.bin"
-    return candidate if candidate.is_file() else None
+    package = opening_package_directory(config_path)
+    candidate = package / "lichess_opening_names.bin"
+    manifest = package / "package.json"
+    return candidate if candidate.is_file() and manifest.is_file() else None
 
 
 def tablebase_package_directory(config_path: Path) -> Path:
@@ -156,7 +153,8 @@ def tablebase_package_directory(config_path: Path) -> Path:
 
 def downloaded_tablebase_directory(config_path: Path) -> Path | None:
     candidate = tablebase_package_directory(config_path)
-    if not candidate.is_dir():
+    manifest = candidate / "package.json"
+    if not candidate.is_dir() or not manifest.is_file():
         return None
     if not any(candidate.glob("*.rtbw")) or not any(candidate.glob("*.rtbz")):
         return None
@@ -241,9 +239,7 @@ def git_blob_sha1(path: Path) -> str:
 def _verify_source(path: Path, source: DownloadSource) -> str:
     actual_sha256 = sha256_file(path)
     if source.sha256 and actual_sha256.lower() != source.sha256.lower():
-        raise ContentLibraryError(
-            f"SHA-256 verification failed for {source.name}."
-        )
+        raise ContentLibraryError(f"SHA-256 verification failed for {source.name}.")
     if source.git_blob_sha1:
         actual_blob = git_blob_sha1(path)
         if actual_blob.lower() != source.git_blob_sha1.lower():
@@ -317,6 +313,11 @@ def download_source(
                     ),
                 )
 
+    if total is not None and completed != total:
+        raise ContentLibraryError(
+            f"Download ended early for {source.name}: received {completed} of {total} bytes."
+        )
+
     partial.replace(destination)
     try:
         return _verify_source(destination, source)
@@ -333,6 +334,7 @@ def install_opening_package(
     package = opening_package_directory(config_path)
     sources_directory = package / "sources"
     package.mkdir(parents=True, exist_ok=True)
+    (package / "package.json").unlink(missing_ok=True)
     downloaded: list[Path] = []
     hashes: dict[str, str] = {}
 
@@ -391,13 +393,16 @@ def _index_filenames(index_url: str, extension: str) -> list[str]:
     names: set[str] = set()
     for href in re.findall(r"href=[\"']([^\"']+)[\"']", document, flags=re.I):
         decoded = urllib.parse.unquote(href)
-        name = Path(urllib.parse.urlparse(decoded).path).name
-        if name.endswith(extension) and name == Path(name).name:
+        parsed = urllib.parse.urlparse(decoded)
+        if parsed.query or parsed.fragment:
+            continue
+        if "/" in parsed.path.strip("/"):
+            continue
+        name = parsed.path.strip("/")
+        if name.endswith(extension) and TABLEBASE_FILENAME.fullmatch(name):
             names.add(name)
     if not names:
-        raise ContentLibraryError(
-            f"The tablebase server returned no {extension} files."
-        )
+        raise ContentLibraryError(f"The tablebase server returned no {extension} files.")
     return sorted(names)
 
 
@@ -415,8 +420,8 @@ def _tablebase_sources() -> list[DownloadSource]:
 
 def _validate_tablebase_directory(directory: Path) -> int:
     try:
-        with chess.syzygy.open_tablebase(str(directory)) as tablebase:
-            count = len(tablebase.wdl) + len(tablebase.dtz)
+        with chess.syzygy.Tablebase() as tablebase:
+            count = int(tablebase.add_directory(str(directory)))
     except Exception as error:
         raise ContentLibraryError(
             f"Downloaded tablebase files could not be opened: {error}"
@@ -440,6 +445,7 @@ def install_tablebase_package(
             "Syzygy package."
         )
 
+    (package / "package.json").unlink(missing_ok=True)
     sources = _tablebase_sources()
     hashes: dict[str, str] = {}
     for index, source in enumerate(sources, start=1):
@@ -460,7 +466,7 @@ def install_tablebase_package(
         "installed_at": int(time.time()),
         "table_count": table_count,
         "verification": (
-            "HTTPS source, file completion, python-chess table loading, and "
+            "HTTPS source, completed transfers, python-chess table loading, and "
             "locally recorded SHA-256 checksums"
         ),
         "files": hashes,
@@ -507,7 +513,7 @@ def verify_installed_package(
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             expected_files = metadata.get("files", {})
-            if not isinstance(expected_files, dict):
+            if not isinstance(expected_files, dict) or not expected_files:
                 return False, "Tablebase metadata is invalid."
             items = sorted(expected_files.items())
             for index, (name, expected) in enumerate(items, start=1):
@@ -557,11 +563,7 @@ def remove_package(config_path: Path, package_id: str) -> None:
 def package_size(directory: Path) -> int:
     if not directory.exists():
         return 0
-    return sum(
-        path.stat().st_size
-        for path in directory.rglob("*")
-        if path.is_file()
-    )
+    return sum(path.stat().st_size for path in directory.rglob("*") if path.is_file())
 
 
 def format_bytes(value: int) -> str:
