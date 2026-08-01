@@ -1,18 +1,18 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import chess
 
 import app
+import local64_multi_move_bridge
 import local_detection
 import local_detection_runtime
 import local_detection_v2
 from chess_tracker import move_changed_squares
 
 
-# LOW is the strictest option. NORMAL keeps the original move-evidence floor,
-# while HIGH accepts weaker visual changes for difficult camera setups.
 MOVE_EVIDENCE_THRESHOLDS = {
     "low": 11.0,
     "normal": 7.0,
@@ -136,14 +136,13 @@ def filter_change_scores(
     raw_scores: dict[chess.Square, float],
     unstable: frozenset[chess.Square],
 ) -> dict[chess.Square, float]:
-    """Mask obstructions without hiding a real move after it settles."""
+    """Legacy compatibility filter used before V2 replaces score gating."""
     blocked = update_persistent_occlusion(raw_scores, unstable)
     masked = set(unstable).union(blocked)
     filtered = {
         square: (0.0 if square in masked else value)
         for square, value in raw_scores.items()
     }
-
     if board is None:
         return filtered
     if stable_legal_move_visible(board, filtered, unstable, blocked):
@@ -155,15 +154,30 @@ def filter_change_scores(
     return filtered
 
 
+def _install_detection_v2() -> None:
+    # Suppress V2's generic bridge during startup and install the guarded app
+    # bridge below. Direct multi-move tests and Local64-disabled sessions then
+    # remain unchanged.
+    original_bridge = local_detection_v2.install_multi_move
+    try:
+        local_detection_v2.install_multi_move = lambda _module: None
+        local_detection_v2.install(app)
+    finally:
+        local_detection_v2.install_multi_move = original_bridge
+
+    recovery_module = sys.modules.get("multi_move_recovery")
+    if recovery_module is not None:
+        local64_multi_move_bridge.install(recovery_module)
+
+
 def install() -> None:
     """Install compatibility filtering, then activate 64-Square Detection V2."""
     if getattr(local_detection_runtime, "_occlusion_fix_installed", False):
-        local_detection_v2.install(app)
+        _install_detection_v2()
         return
 
     state = local_detection.STATE
     state.blocked_squares = frozenset()
-
     original_configure = local_detection.configure
 
     def configure(config_path: Path) -> None:
@@ -174,4 +188,4 @@ def install() -> None:
     local_detection_runtime.stable_legal_move_visible = stable_legal_move_visible
     local_detection_runtime.filter_change_scores = filter_change_scores
     local_detection_runtime._occlusion_fix_installed = True
-    local_detection_v2.install(app)
+    _install_detection_v2()
