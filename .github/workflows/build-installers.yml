@@ -104,9 +104,9 @@ jobs:
         run: bash packaging/build_macos.sh
       - name: Verify app bundle
         run: |
-          test -d dist/ChessCamera.app
-          test -f dist/ChessCamera.app/Contents/Info.plist
-          plutil -p dist/ChessCamera.app/Contents/Info.plist | grep NSCameraUsageDescription
+          test -d dist/Knightboard.app
+          test -f dist/Knightboard.app/Contents/Info.plist
+          plutil -p dist/Knightboard.app/Contents/Info.plist | grep NSCameraUsageDescription
       - name: Upload macOS packages
         uses: actions/upload-artifact@v4
         with:
