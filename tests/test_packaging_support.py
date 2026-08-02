@@ -42,7 +42,7 @@ def test_pyinstaller_spec_includes_camera_permission_and_ocr_data() -> None:
     assert 'collect_data_files("rapidocr")' in spec
     assert 'collect_dynamic_libs("onnxruntime")' in spec
     assert "NSCameraUsageDescription" in spec
-    assert 'name="ChessCamera.app"' in spec
+    assert 'name="Knightboard.app"' in spec
 
 
 def test_explicit_runtime_data_directory_is_respected(

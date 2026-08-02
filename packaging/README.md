@@ -1,10 +1,10 @@
-# Chess Camera desktop packages
+# Knightboard desktop packages
 
 This folder contains the reproducible build definitions for the three desktop packages:
 
-- Windows portable folder containing `ChessCamera.exe`
+- Windows portable folder containing `Knightboard.exe`
 - Debian/Ubuntu `.deb` package
-- macOS `ChessCamera.app` and `.dmg`
+- macOS `Knightboard.app` and `.dmg`
 
 Generated binaries are intentionally published as GitHub Actions artifacts instead of being committed to Git. The packaged dependencies are large and differ by operating system and processor architecture.
 
@@ -12,9 +12,9 @@ Generated binaries are intentionally published as GitHub Actions artifacts inste
 
 Source checkouts continue to store generated files beside the repository. Installed packages use writable per-user folders:
 
-- Windows: `%LOCALAPPDATA%\ChessCamera`
-- Debian/Linux: `${XDG_DATA_HOME:-~/.local/share}/chess-camera`
-- macOS: `~/Library/Application Support/ChessCamera`
+- Windows: `%LOCALAPPDATA%\Knightboard`
+- Debian/Linux: `${XDG_DATA_HOME:-~/.local/share}/knightboard`
+- macOS: `~/Library/Application Support/Knightboard`
 
 These folders contain settings, board profiles, games, generated opening books, custom piece packs, custom sound packs, and optional engines.
 
@@ -33,11 +33,11 @@ build_windows_exe.bat
 Output:
 
 ```text
-dist\ChessCamera\ChessCamera.exe
-release\ChessCamera-<version>-Windows-x64.zip
+dist\Knightboard\Knightboard.exe
+release\Knightboard-<version>-Windows-x64.zip
 ```
 
-The executable is an onedir PyInstaller build. Keep `ChessCamera.exe` beside the generated `_internal` folder. The ZIP contains the complete portable application.
+The executable is an onedir PyInstaller build. Keep `Knightboard.exe` beside the generated `_internal` folder. The ZIP contains the complete portable application.
 
 ## Debian, Ubuntu, Zorin OS, and Linux Mint
 
@@ -58,16 +58,16 @@ chmod +x packaging/build_deb.sh
 Output:
 
 ```text
-release/chess-camera_<version>_<architecture>.deb
+release/knightboard_<version>_<architecture>.deb
 ```
 
 Install it with:
 
 ```bash
-sudo apt install ./release/chess-camera_<version>_amd64.deb
+sudo apt install ./release/knightboard_<version>_amd64.deb
 ```
 
-The package installs the application under `/opt/chess-camera`, the launcher as `/usr/bin/chess-camera`, and a desktop-menu entry.
+The package installs the application under `/opt/knightboard`, the launcher as `/usr/bin/knightboard`, and a desktop-menu entry.
 
 ## macOS
 
@@ -81,9 +81,9 @@ chmod +x packaging/build_macos.sh
 Outputs:
 
 ```text
-dist/ChessCamera.app
-release/ChessCamera-<version>-macOS.dmg
-release/ChessCamera-<version>-macOS-app.zip
+dist/Knightboard.app
+release/Knightboard-<version>-macOS.dmg
+release/Knightboard-<version>-macOS-app.zip
 ```
 
 The local script applies an ad-hoc signature. A public build should use an Apple Developer ID certificate and Apple notarization. Intel and Apple Silicon packages must be built on the matching architecture unless a universal dependency set is prepared.

@@ -10,9 +10,9 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
 ICON_DIRECTORY = ROOT / "build" / "icons"
-PNG_PATH = ICON_DIRECTORY / "ChessCamera.png"
-ICO_PATH = ICON_DIRECTORY / "ChessCamera.ico"
-ICNS_PATH = ICON_DIRECTORY / "ChessCamera.icns"
+PNG_PATH = ICON_DIRECTORY / "Knightboard.png"
+ICO_PATH = ICON_DIRECTORY / "Knightboard.ico"
+ICNS_PATH = ICON_DIRECTORY / "Knightboard.icns"
 
 
 def _icon(size: int) -> Image.Image:
@@ -88,7 +88,7 @@ def _icon(size: int) -> Image.Image:
 def _write_icns() -> None:
     if sys.platform != "darwin" or shutil.which("iconutil") is None:
         return
-    iconset = ICON_DIRECTORY / "ChessCamera.iconset"
+    iconset = ICON_DIRECTORY / "Knightboard.iconset"
     if iconset.exists():
         shutil.rmtree(iconset)
     iconset.mkdir(parents=True)

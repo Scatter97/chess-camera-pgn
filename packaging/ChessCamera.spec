@@ -37,11 +37,11 @@ hiddenimports = sorted(
 )
 
 if sys.platform.startswith("win"):
-    icon_path = ICONS / "ChessCamera.ico"
+    icon_path = ICONS / "Knightboard.ico"
 elif sys.platform == "darwin":
-    icon_path = ICONS / "ChessCamera.icns"
+    icon_path = ICONS / "Knightboard.icns"
 else:
-    icon_path = ICONS / "ChessCamera.png"
+    icon_path = ICONS / "Knightboard.png"
 icon_value = str(icon_path) if icon_path.is_file() else None
 
 
@@ -65,7 +65,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="ChessCamera",
+    name="Knightboard",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -86,23 +86,23 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="ChessCamera",
+    name="Knightboard",
 )
 
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
-        name="ChessCamera.app",
+        name="Knightboard.app",
         icon=icon_value,
-        bundle_identifier="com.joshuawang.chesscamera",
+        bundle_identifier="com.joshuawang.knightboard",
         info_plist={
-            "CFBundleDisplayName": "Chess Camera",
-            "CFBundleName": "ChessCamera",
-            "CFBundleShortVersionString": "0.39.7",
-            "CFBundleVersion": "0.39.7",
+            "CFBundleDisplayName": "Knightboard",
+            "CFBundleName": "Knightboard",
+            "CFBundleShortVersionString": "0.50.0",
+            "CFBundleVersion": "0.50.0",
             "NSCameraUsageDescription": (
-                "Chess Camera uses a connected camera to recognize moves "
-                "played on a physical chessboard."
+                "Knightboard uses a connected camera to record moves played "
+                "on a physical chessboard."
             ),
             "NSHighResolutionCapable": True,
         },

@@ -21,7 +21,7 @@ fi
 VERSION="$(.venv-build/bin/python -c 'from chess_camera_app.core.version import APP_VERSION; print(APP_VERSION)')"
 ARCH="$(dpkg --print-architecture)"
 PACKAGE_ROOT="$ROOT/build/debian-package"
-INSTALL_ROOT="$PACKAGE_ROOT/opt/chess-camera"
+INSTALL_ROOT="$PACKAGE_ROOT/opt/knightboard"
 
 rm -rf "$PACKAGE_ROOT"
 mkdir -p \
@@ -30,15 +30,15 @@ mkdir -p \
     "$PACKAGE_ROOT/usr/bin" \
     "$PACKAGE_ROOT/usr/share/applications" \
     "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps" \
-    "$PACKAGE_ROOT/usr/share/doc/chess-camera"
+    "$PACKAGE_ROOT/usr/share/doc/knightboard"
 
-cp -a dist/ChessCamera/. "$INSTALL_ROOT/"
-cp README.md "$PACKAGE_ROOT/usr/share/doc/chess-camera/README.md"
-cp build/icons/ChessCamera.png \
-    "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/chess-camera.png"
+cp -a dist/Knightboard/. "$INSTALL_ROOT/"
+cp README.md "$PACKAGE_ROOT/usr/share/doc/knightboard/README.md"
+cp build/icons/Knightboard.png \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/knightboard.png"
 
 cat > "$PACKAGE_ROOT/DEBIAN/control" <<EOF
-Package: chess-camera
+Package: knightboard
 Version: $VERSION
 Section: games
 Priority: optional
@@ -46,35 +46,35 @@ Architecture: $ARCH
 Maintainer: Joshua Wang
 Depends: libc6 (>= 2.35), libgl1, libglib2.0-0, libx11-6, libxcb1
 Description: Camera-based over-the-board chess PGN recorder
- Chess Camera recognizes moves played on a physical chessboard, records PGN,
- tracks clocks, and provides local history and analysis tools.
+ Knightboard is an offline chess studio with camera game recording, PGN,
+ clocks, local history, analysis, opening and endgame tools.
 EOF
 
-cat > "$PACKAGE_ROOT/usr/bin/chess-camera" <<'EOF'
+cat > "$PACKAGE_ROOT/usr/bin/knightboard" <<'EOF'
 #!/usr/bin/env bash
 set -e
-export CHESS_CAMERA_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/chess-camera"
-exec /opt/chess-camera/ChessCamera "$@"
+export KNIGHTBOARD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/knightboard"
+exec /opt/knightboard/Knightboard "$@"
 EOF
-chmod 0755 "$PACKAGE_ROOT/usr/bin/chess-camera"
+chmod 0755 "$PACKAGE_ROOT/usr/bin/knightboard"
 
-cat > "$PACKAGE_ROOT/usr/share/applications/chess-camera.desktop" <<'EOF'
+cat > "$PACKAGE_ROOT/usr/share/applications/knightboard.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=Chess Camera
-Comment=Record physical chess games as PGN
-Exec=chess-camera
-Icon=chess-camera
+Name=Knightboard
+Comment=Offline chess studio with camera game recording
+Exec=knightboard
+Icon=knightboard
 Terminal=false
 Categories=Game;Utility;
-Keywords=Chess;Camera;PGN;
+Keywords=Chess;Camera;PGN;Analysis;Opening;Endgame;
 StartupNotify=true
 EOF
 
 find "$PACKAGE_ROOT" -type d -exec chmod 0755 {} +
-chmod 0755 "$INSTALL_ROOT/ChessCamera"
+chmod 0755 "$INSTALL_ROOT/Knightboard"
 
-OUTPUT="release/chess-camera_${VERSION}_${ARCH}.deb"
+OUTPUT="release/knightboard_${VERSION}_${ARCH}.deb"
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
 
 echo "Built $OUTPUT"

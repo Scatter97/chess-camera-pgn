@@ -11,6 +11,7 @@ import chess.pgn
 import cv2
 
 from chess_camera_app.core import app
+from chess_camera_app.ui import visual_system as visual
 
 
 GAMES_DIR = Path("games")
@@ -84,6 +85,13 @@ def _put(
         thickness,
         cv2.LINE_AA,
     )
+
+
+def knightboard_view(height: int, width: int, title: str, subtitle: str = ""):
+    """Create the common branded canvas for feature windows."""
+    view = visual.canvas(height, width)
+    visual.brand_header(view, title, subtitle)
+    return view
 
 
 def _read_analysis_for(pgn_path: Path) -> tuple[float | None, float | None]:

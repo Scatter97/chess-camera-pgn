@@ -9,6 +9,7 @@ from chess_camera_app.core import app
 from chess_camera_app.core import app_navigation as navigation
 from chess_camera_app.ui import pregame_ui
 from chess_camera_app.ui import ui_support as ui
+from chess_camera_app.ui import visual_system as visual
 from chess_camera_app.ui.pregame_ui import Button
 
 
@@ -109,14 +110,11 @@ def show_game_history() -> None:
             selected = 0
             scroll = 0
 
-        view = np.zeros((760, 1180, 3), dtype=np.uint8)
-        view[:] = (28, 31, 37)
-        ui._put(view, "Game History", (35, 48), (100, 220, 255), 0.95, 2)
+        view = ui.knightboard_view(760, 1180, "Game history", "Local games and analysis")
         ui._put(
             view,
             "Recorded over-the-board games",
-            (35, 80),
-            (165, 175, 190),
+            (35, 112), visual.MUTED,
             0.50,
         )
         buttons = []
@@ -131,17 +129,11 @@ def show_game_history() -> None:
 
         for row, item in enumerate(games[scroll : scroll + visible]):
             index = scroll + row
-            y = 110 + row * 70
+            y = 140 + row * 64
             active = index == selected
-            fill = (52, 90, 72) if active else (43, 47, 55)
-            cv2.rectangle(view, (35, y), (770, y + 58), fill, -1)
-            cv2.rectangle(
-                view,
-                (35, y),
-                (770, y + 58),
-                (120, 255, 170) if active else (85, 92, 105),
-                2,
-            )
+            fill = visual.ACCENT_DARK if active else visual.SURFACE
+            visual.rounded_rect(view, 35, y, 770, y + 56, fill,
+                                visual.ACCENT if active else visual.BORDER, 12, 2 if active else 1)
             ui._put(
                 view,
                 f"{item.white[:20]}  {item.result}  {item.black[:20]}",
@@ -152,7 +144,7 @@ def show_game_history() -> None:
                 view,
                 f"{item.date}   {item.moves} moves   {item.time_control}",
                 (50, y + 48),
-                (165, 175, 190),
+                visual.MUTED,
                 0.43,
             )
             buttons.append(Button(f"select_{index}", "", 35, y, 735, 58))
@@ -170,7 +162,8 @@ def show_game_history() -> None:
 
         if games:
             item = games[selected]
-            ui._put(view, "GAME DETAILS", (820, 115), (100, 220, 255), 0.58)
+            visual.card(view, 800, 132, 1155, 685)
+            ui._put(view, "GAME DETAILS", (820, 166), visual.ACCENT, 0.58)
             details = [
                 f"White: {item.white}",
                 f"Black: {item.black}",
@@ -192,19 +185,19 @@ def show_game_history() -> None:
                 ),
             ]
             for index, line in enumerate(details):
-                ui._put(view, line[:43], (820, 160 + index * 38), scale=0.50)
+                ui._put(view, line[:43], (820, 205 + index * 31), scale=0.48)
 
             review = Button(
                 "review",
                 "REVIEW WITH STOCKFISH",
                 820,
-                545,
+                535,
                 315,
                 52,
                 active=True,
             )
-            copy_pgn = Button("copy_pgn", "COPY PGN", 820, 610, 150, 52)
-            delete = Button("delete", "DELETE", 985, 610, 150, 52)
+            copy_pgn = Button("copy_pgn", "COPY PGN", 820, 600, 150, 52)
+            delete = Button("delete", "DELETE", 985, 600, 150, 52)
             buttons.extend((review, copy_pgn, delete))
             for item_button in (review, copy_pgn, delete):
                 pregame_ui.draw_button(view, item_button)
