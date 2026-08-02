@@ -347,3 +347,8 @@ The default optional library is under `content_library/` inside that location. D
 Copyright © 2026 Joshua Wang. All rights reserved.
 
 No permission is granted to use, copy, modify, distribute, sublicense, sell, or create derivative works from this source code without prior written permission from the copyright holder. Third-party datasets retain their own licenses and notices.
+## Development with OpenHands
+
+This repository can be developed using the OpenHands AI coding assistant. OpenHands can help you explore the codebase, run tests, make changes, and create pull requests directly from the command line.
+
+
