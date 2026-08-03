@@ -216,39 +216,48 @@ def main() -> None:
     multi_move_settings.install(feature_settings, app)
     content_manager_ui.install(app, navigation)
 
+    # ------------------------------------------------------------
+    # UI selection – Qt preferred, OpenCV fallback
+    # ------------------------------------------------------------
     if _HAS_QT_UI:
-        # Use the modern Qt UI. It returns the selected action string.
-        qt_app = QtApp()
-        action = qt_app.run()
+        # QtApp already knows how to launch the selected screen.
+        # It will call the appropriate explorer / game logic internally,
+        # so we simply start it and then exit the main loop.
+        QtApp().run()
+        # No further processing is needed – the Qt UI handles the
+        # action and returns when the user quits the Qt app.
+        return
     else:
         # Fallback to the original OpenCV UI.
         action = home_screen()
 
-    # The rest of the logic is unchanged – it maps the action string to the appropriate feature implementation.
-    if action == "history":
-        game_history.show_game_history()
-    elif action == "chess960":
-        chess960_generator.show_chess960_generator()
-    elif action == "opening":
-        opening_explorer.show_opening_explorer()
-    elif action == "endgame":
-        endgame_explorer.show_endgame_explorer()
-    elif action == "virtual_bot":
-        bot_games.show_virtual_bot_game()
-    elif action == "otb_bot":
-        bot_games.show_virtual_bot_game(otb=True)
-    elif action == "settings":
-        navigation.settings_screen()
-    elif action == "start":
-        saved = game_session.run_game()
-        while saved:
-            post_action = navigation.post_game_screen()
-            if post_action != "rematch" or navigation.LAST_SETUP is None:
-                break
-            navigation.REMATCH_SETUP = navigation.LAST_SETUP
+        # --------------------------------------------------------
+        # Legacy OpenCV‑based action mapping (unchanged)
+        # --------------------------------------------------------
+        if action == "history":
+            game_history.show_game_history()
+        elif action == "chess960":
+            chess960_generator.show_chess960_generator()
+        elif action == "opening":
+            opening_explorer.show_opening_explorer()
+        elif action == "endgame":
+            endgame_explorer.show_endgame_explorer()
+        elif action == "virtual_bot":
+            bot_games.show_virtual_bot_game()
+        elif action == "otb_bot":
+            bot_games.show_virtual_bot_game(otb=True)
+        elif action == "settings":
+            navigation.settings_screen()
+        elif action == "start":
             saved = game_session.run_game()
-    else:
-        return
+            while saved:
+                post_action = navigation.post_game_screen()
+                if post_action != "rematch" or navigation.LAST_SETUP is None:
+                    break
+                navigation.REMATCH_SETUP = navigation.LAST_SETUP
+                saved = game_session.run_game()
+        else:
+            return
 
 
 if __name__ == "__main__":
