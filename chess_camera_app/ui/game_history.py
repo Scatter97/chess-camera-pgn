@@ -76,7 +76,11 @@ def delete_history_game(item: ui.HistoryGame) -> tuple[bool, str]:
 def show_game_history() -> None:
     window = "Chess Camera - Game History"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window, 1180, 760)
+    try:
+        cv2.resizeWindow(window, 1180, 760)
+    except cv2.error:
+        # Ignore resize errors when the window cannot be created (e.g., head‑less)
+        pass
     selected = 0
     scroll = 0
     message = ""
