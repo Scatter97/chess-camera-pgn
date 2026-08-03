@@ -12,6 +12,12 @@ from chess_camera_app.analysis import chess960_generator
 from chess_camera_app.content import content_manager_ui
 from chess_camera_app.analysis import endgame_explorer
 from chess_camera_app.ui import feature_settings
+# Try to import the new Qt based UI. If unavailable we fall back to the original OpenCV UI.
+try:
+    from chess_camera_app.ui.qt_ui import QtApp
+    _HAS_QT_UI = True
+except Exception:  # pragma: no cover
+    _HAS_QT_UI = False
 from chess_camera_app.ui import game_history
 from chess_camera_app.game import game_session
 from chess_camera_app.game import bot_games
@@ -210,32 +216,39 @@ def main() -> None:
     multi_move_settings.install(feature_settings, app)
     content_manager_ui.install(app, navigation)
 
-    while True:
+    if _HAS_QT_UI:
+        # Use the modern Qt UI. It returns the selected action string.
+        qt_app = QtApp()
+        action = qt_app.run()
+    else:
+        # Fallback to the original OpenCV UI.
         action = home_screen()
-        if action == "history":
-            game_history.show_game_history()
-        elif action == "chess960":
-            chess960_generator.show_chess960_generator()
-        elif action == "opening":
-            opening_explorer.show_opening_explorer()
-        elif action == "endgame":
-            endgame_explorer.show_endgame_explorer()
-        elif action == "virtual_bot":
-            bot_games.show_virtual_bot_game()
-        elif action == "otb_bot":
-            bot_games.show_virtual_bot_game(otb=True)
-        elif action == "settings":
-            navigation.settings_screen()
-        elif action == "start":
+
+    # The rest of the logic is unchanged – it maps the action string to the appropriate feature implementation.
+    if action == "history":
+        game_history.show_game_history()
+    elif action == "chess960":
+        chess960_generator.show_chess960_generator()
+    elif action == "opening":
+        opening_explorer.show_opening_explorer()
+    elif action == "endgame":
+        endgame_explorer.show_endgame_explorer()
+    elif action == "virtual_bot":
+        bot_games.show_virtual_bot_game()
+    elif action == "otb_bot":
+        bot_games.show_virtual_bot_game(otb=True)
+    elif action == "settings":
+        navigation.settings_screen()
+    elif action == "start":
+        saved = game_session.run_game()
+        while saved:
+            post_action = navigation.post_game_screen()
+            if post_action != "rematch" or navigation.LAST_SETUP is None:
+                break
+            navigation.REMATCH_SETUP = navigation.LAST_SETUP
             saved = game_session.run_game()
-            while saved:
-                post_action = navigation.post_game_screen()
-                if post_action != "rematch" or navigation.LAST_SETUP is None:
-                    break
-                navigation.REMATCH_SETUP = navigation.LAST_SETUP
-                saved = game_session.run_game()
-        else:
-            return
+    else:
+        return
 
 
 if __name__ == "__main__":
