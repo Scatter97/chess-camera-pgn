@@ -355,7 +355,11 @@ def show_endgame_explorer(initial_fen: str | None = None) -> None:
     queue: list[str] = []
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(WINDOW_NAME, 1280, 780)
+    try:
+        cv2.resizeWindow(WINDOW_NAME, 1280, 780)
+    except cv2.error:
+        # Ignore resize error when window cannot be created (e.g., headless)
+        pass
 
     def mouse(event: int, x: int, y: int, _flags: int, _data: object) -> None:
         if event == cv2.EVENT_LBUTTONUP:
