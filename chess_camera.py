@@ -220,32 +220,7 @@ def main() -> None:
     # UI selection – Qt preferred, OpenCV fallback
     # ------------------------------------------------------------
     if _HAS_QT_UI:
-        def open_workspace(action: str) -> None:
-            """Dispatch a Qt workspace to the existing Knightboard feature."""
-            if action == "history":
-                game_history.show_game_history()
-            elif action == "chess960":
-                chess960_generator.show_chess960_generator()
-            elif action == "opening":
-                opening_explorer.show_opening_explorer()
-            elif action == "endgame":
-                endgame_explorer.show_endgame_explorer()
-            elif action == "virtual_bot":
-                bot_games.show_virtual_bot_game()
-            elif action == "otb_bot":
-                bot_games.show_virtual_bot_game(otb=True)
-            elif action == "settings":
-                navigation.settings_screen()
-            elif action == "start":
-                saved = game_session.run_game()
-                while saved:
-                    post_action = navigation.post_game_screen()
-                    if post_action != "rematch" or navigation.LAST_SETUP is None:
-                        break
-                    navigation.REMATCH_SETUP = navigation.LAST_SETUP
-                    saved = game_session.run_game()
-
-        QtApp(action_handler=open_workspace).run()
+        QtApp().run()
         return
     else:
         # Fallback to the original OpenCV UI.
