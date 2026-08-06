@@ -59,7 +59,7 @@ class QtApp(QWidget):
         ("OTB BOT GAME", "otb_bot", "Record an OTB game while Knightboard assists."),
     )
 
-    def __init__(self):
+    def __init__(self, action_handler=None):
         # QWidget must never be constructed before QApplication.  The old
         # launcher created ``QtApp()`` first, which caused Qt to terminate
         # immediately on some platforms and looked like a tiny window flash.
@@ -68,6 +68,7 @@ class QtApp(QWidget):
         else:
             self._app = QApplication.instance()
         super().__init__()
+        self._action_handler = action_handler
         self.setWindowTitle("Knightboard")
         self.setMinimumSize(800, 600)
         self.resize(980, 700)
@@ -168,11 +169,27 @@ class QtApp(QWidget):
         card_layout.addWidget(status)
         action_button = QPushButton("OPEN WORKSPACE")
         action_button.setObjectName("primary")
-        action_button.clicked.connect(lambda: self.action_selected.emit(action))
+        action_button.clicked.connect(lambda: self._open_workspace(action))
         card_layout.addWidget(action_button)
         layout.addWidget(card)
         layout.addStretch()
         return page
+
+    def _open_workspace(self, action):
+        """Run the existing feature entry point and return to this window.
+
+        Most legacy feature screens are still OpenCV-based.  We temporarily
+        hide the Qt shell while one of those workflows runs, then restore the
+        same Knightboard window when it finishes.
+        """
+        if self._action_handler is None:
+            self.action_selected.emit(action)
+            return
+        self.hide()
+        try:
+            self._action_handler(action)
+        finally:
+            self.show()
 
     def _make_handler(self, action):
         @Slot()
