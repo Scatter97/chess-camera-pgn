@@ -259,58 +259,58 @@ def render_camera_panel(
     stability_progress: float,
     fast_mode: bool,
 ) -> np.ndarray:
-    panel = np.zeros((620, 300, 3), dtype=np.uint8)
-    panel[:] = (25, 28, 34)
+    panel = visual.canvas(620, 300)
+    visual.rounded_rect(panel, 8, 8, 292, 612, visual.SURFACE, visual.BORDER, 14)
     source = (
         RUNTIME.latest_preview
         if RUNTIME.latest_preview is not None
         else board_view
     )
     panel[36:182, 20:280] = fit(source, 260, 146)
-    cv2.rectangle(panel, (20, 36), (279, 181), (112, 122, 138), 2)
+    cv2.rectangle(panel, (20, 36), (279, 181), visual.BORDER, 2)
     put(
         panel,
         f"{detection_mode_name} detection",
         (20, 19),
-        (120, 255, 170) if fast_mode else (120, 220, 255),
+        visual.SUCCESS if fast_mode else visual.ACCENT,
     )
     if RUNTIME.show_debug:
         put(
             panel,
             f"Preview {display_fps:.1f} FPS | Detect {RUNTIME.measured_fps:.1f}/{RUNTIME.target_fps}",
             (20, 204),
-            (120, 255, 170),
+            visual.SUCCESS,
             0.34,
         )
         put(
             panel,
             f"Input {RUNTIME.input_size[0]}x{RUNTIME.input_size[1]} | Detection {RUNTIME.detection_size[0]}x{RUNTIME.detection_size[1]}",
             (20, 224),
-            (185, 195, 210),
+            visual.TEXT,
             0.32,
         )
         put(
             panel,
             f"Camera {RUNTIME.camera_index}: {RUNTIME.camera_name[:23]}",
             (20, 244),
-            (185, 195, 210),
+            visual.TEXT,
             0.32,
         )
         put(
             panel,
             f"{RUNTIME.backend} | Driver {RUNTIME.driver_fps:.1f} FPS",
             (20, 263),
-            (145, 155, 170),
+            visual.MUTED,
             0.31,
         )
-    cv2.rectangle(panel, (20, 272), (280, 279), (18, 19, 22), -1)
+    cv2.rectangle(panel, (20, 272), (280, 279), visual.INK, -1)
     progress = int(260 * min(1.0, max(0.0, stability_progress)))
     if progress:
         cv2.rectangle(
             panel,
             (20, 272),
             (20 + progress, 279),
-            (80, 220, 120),
+            visual.SUCCESS,
             -1,
         )
     return panel
@@ -334,18 +334,21 @@ def test_preview(camera: Camera) -> str:
             if ok:
                 frames += 1
                 measured = frames / max(0.001, time.monotonic() - started)
-                view = frame.copy()
+                view = visual.canvas(frame.shape[0] + 96, frame.shape[1])
+                view[82:82 + frame.shape[0], :frame.shape[1]] = frame
+                visual.brand_header(view, "Camera preview", f"Camera {camera.index}")
                 put(
                     view,
                     f"Camera {camera.index} | {frame.shape[1]}x{frame.shape[0]} | {measured:.1f} FPS",
-                    (24, 36),
-                    (120, 255, 170),
+                    (24, 120),
+                    visual.SUCCESS,
                     0.62,
                 )
                 put(
                     view,
                     "Enter or Esc closes the test",
-                    (24, 70),
+                    (24, 150),
+                    visual.MUTED,
                     scale=0.48,
                 )
                 cv2.imshow(window, view)
@@ -596,3 +599,4 @@ def install(target: ModuleType, navigation: ModuleType) -> None:
     target.render_camera_panel = render_camera_panel
     navigation.settings_screen = lambda: settings_hub(target, original_settings)
     target._advanced_camera_installed = True
+
