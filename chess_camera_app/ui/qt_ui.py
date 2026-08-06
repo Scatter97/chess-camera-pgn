@@ -141,6 +141,9 @@ class QtApp(QWidget):
         return page
 
     def _build_feature_page(self, action):
+        if action == "chess960":
+            return self._build_chess960_page()
+
         labels = dict((item[1], (item[0], item[2])) for item in self._FEATURES)
         title_text, description = labels[action]
         page = QWidget()
@@ -185,6 +188,69 @@ class QtApp(QWidget):
             else:
                 games.addItem("No saved games yet. Record a game to see it here.")
             card_layout.addWidget(games)
+        layout.addWidget(card)
+        layout.addStretch()
+        return page
+
+    def _build_chess960_page(self):
+        """Native Qt Chess960 generator using the existing offline rules engine."""
+        from chess_camera_app.analysis.chess960_generator import _new_position
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+        back = QPushButton("←  Back to main menu")
+        back.setObjectName("primary")
+        back.setMaximumWidth(210)
+        back.clicked.connect(lambda: self._show_page("home"))
+        layout.addWidget(back, 0, Qt.AlignLeft)
+
+        title = QLabel("CHESS960")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        intro = QLabel("Generate legal Chess960 starts. The bishops begin on opposite colours and the king begins between the rooks.")
+        intro.setObjectName("pageDescription")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        position = QLabel()
+        position.setObjectName("pageTitle")
+        board_view = QLabel()
+        board_view.setFont(QFont("Consolas", 18))
+        board_view.setAlignment(Qt.AlignCenter)
+        board_view.setStyleSheet("background: #0d1118; border: 1px solid #344258; padding: 16px;")
+        fen = QLabel()
+        fen.setObjectName("muted")
+        fen.setWordWrap(True)
+        generate = QPushButton("GENERATE ANOTHER POSITION")
+        generate.setObjectName("primary")
+
+        def refresh():
+            number, board = _new_position()
+            symbols = {"r": "♜", "n": "♞", "b": "♝", "q": "♛", "k": "♚", "p": "♟",
+                       "R": "♖", "N": "♘", "B": "♗", "Q": "♕", "K": "♔", "P": "♙"}
+            rows = []
+            for rank in range(7, -1, -1):
+                cells = []
+                for file_index in range(8):
+                    piece = board.piece_at(rank * 8 + file_index)
+                    cells.append(symbols.get(piece.symbol(), "·") if piece else "·")
+                rows.append(f"{rank + 1}  " + "  ".join(cells))
+            rows.append("   a  b  c  d  e  f  g  h")
+            position.setText(f"Position #{number}")
+            board_view.setText("\n".join(rows))
+            fen.setText(f"FEN: {board.fen()}")
+
+        generate.clicked.connect(refresh)
+        refresh()
+        card_layout.addWidget(position)
+        card_layout.addWidget(board_view)
+        card_layout.addWidget(fen)
+        card_layout.addWidget(generate)
         layout.addWidget(card)
         layout.addStretch()
         return page
