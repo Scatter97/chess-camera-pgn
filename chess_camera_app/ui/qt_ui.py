@@ -1,147 +1,199 @@
+"""Modern, single-window Qt shell for Knightboard.
 
-"""
-Qt based UI for Knightboard.
-
-This module provides a minimal Qt5/Qt6 (via PySide6) replacement for the
-original OpenCV‑based UI.  It is intentionally lightweight – the goal is to
-demonstrate a modern, themable UI that can be expanded to cover the full
-feature set of the application.
-
-A typical workflow:
-
-    from chess_camera_app.ui.qt_ui import QtApp
-    QtApp().run()
-
-The UI currently shows a simple start screen with large buttons that map to
-the same actions as the original `home_screen`.  Clicking a button will emit
-the corresponding action string, which the main entry point can handle in the
-same way as before.
-
-All heavy‑lifting (camera handling, detection, engine integration) remains
-in the existing modules; this file only deals with presentation.
+The legacy screens use OpenCV windows.  This module provides the navigation
+shell around them while keeping the user in one Qt window: selecting a menu
+item swaps the current page in a ``QStackedWidget`` instead of closing the
+window or opening another one.
 """
 
 import sys
-import os
-from pathlib import Path
 
-# Prefer PySide6 (Qt6) but fall back to PySide2 if unavailable.
 try:
     from PySide6.QtWidgets import (
         QApplication,
-        QWidget,
-        QPushButton,
-        QVBoxLayout,
+        QFrame,
+        QGridLayout,
+        QHBoxLayout,
         QLabel,
-        QMessageBox,
+        QPushButton,
+        QStackedWidget,
+        QVBoxLayout,
+        QWidget,
     )
-    from PySide6.QtGui import QIcon, QFont
+    from PySide6.QtGui import QFont
     from PySide6.QtCore import Qt, Signal, Slot
 except ImportError:
     try:
         from PySide2.QtWidgets import (
             QApplication,
-            QWidget,
-            QPushButton,
-            QVBoxLayout,
+            QFrame,
+            QGridLayout,
+            QHBoxLayout,
             QLabel,
-            QMessageBox,
+            QPushButton,
+            QStackedWidget,
+            QVBoxLayout,
+            QWidget,
         )
-        from PySide2.QtGui import QIcon, QFont
+        from PySide2.QtGui import QFont
         from PySide2.QtCore import Qt, Signal, Slot
-    except ImportError as e:
+    except ImportError as exc:
         raise ImportError(
             "Qt UI requires PySide6 (or PySide2). Install with `pip install PySide6`."
-        ) from e
+        ) from exc
 
 
 class QtApp(QWidget):
-    \"\"\"Main window for the modern UI.
-
-    The window emits the selected action via the ``action_selected`` signal,
-    mirroring the strings returned by the original OpenCV home screen.
-    \"\"\"
+    """Knightboard's in-window navigation shell."""
 
     action_selected = Signal(str)
 
+    _FEATURES = (
+        ("RECORD OTB GAME", "start", "Record an over-the-board game with the camera."),
+        ("GAME HISTORY", "history", "Review and manage games saved on this device."),
+        ("CHESS960", "chess960", "Start a Chess960 game with a randomized back rank."),
+        ("OPENING EXPLORER", "opening", "Explore opening ideas from your local library."),
+        ("ENDGAME EXPLORER", "endgame", "Study endgame positions and plans."),
+        ("SETTINGS & LIBRARIES", "settings", "Configure cameras, libraries, and preferences."),
+        ("VIRTUAL BOT GAME", "virtual_bot", "Play an offline game against a virtual bot."),
+        ("OTB BOT GAME", "otb_bot", "Record an OTB game while Knightboard assists."),
+    )
+
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Knightboard – Modern UI")
+        self.setWindowTitle("Knightboard")
         self.setMinimumSize(800, 600)
+        self.resize(980, 700)
+        self._stack = QStackedWidget()
+        self._pages = {}
         self._setup_ui()
 
     def _setup_ui(self):
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignCenter)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(32, 28, 32, 28)
+        root.setSpacing(18)
 
-        header = QLabel("Your offline chess studio")
-        header_font = QFont("Arial", 24, QFont.Bold)
-        header.setFont(header_font)
-        header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
+        header = QHBoxLayout()
+        brand = QLabel("KNIGHTBOARD")
+        brand.setObjectName("brand")
+        brand.setFont(QFont("Arial", 20, QFont.Bold))
+        header.addWidget(brand)
+        header.addStretch()
+        version = QLabel("OFFLINE CHESS STUDIO  •  v0.50")
+        version.setObjectName("version")
+        header.addWidget(version)
+        root.addLayout(header)
 
-        # Define buttons and the action they correspond to.
-        buttons = [
-            ("RECORD OTB GAME", "start"),
-            ("GAME HISTORY", "history"),
-            ("CHESS960", "chess960"),
-            ("OPENING EXPLORER", "opening"),
-            ("ENDGAME EXPLORER", "endgame"),
-            ("SETTINGS & LIBRARIES", "settings"),
-            ("VIRTUAL BOT GAME", "virtual_bot"),
-            ("OTB BOT GAME", "otb_bot"),
-            ("EXIT KNIGHTBOARD", "exit"),
-        ]
+        self._pages["home"] = self._build_home_page()
+        self._stack.addWidget(self._pages["home"])
+        root.addWidget(self._stack, 1)
+        self._show_page("home")
 
-        btn_font = QFont("Arial", 14)
+        self.setStyleSheet(
+            """
+            QWidget { background: #10131a; color: #eef2f7; }
+            QLabel#brand { color: #f6c453; letter-spacing: 2px; }
+            QLabel#version, QLabel#muted { color: #8f9bad; }
+            QLabel#pageTitle { color: #ffffff; font-size: 28px; font-weight: 700; }
+            QLabel#pageDescription { color: #aab4c3; font-size: 15px; }
+            QFrame#card { background: #191e28; border: 1px solid #2b3443; border-radius: 12px; }
+            QPushButton { background: #202938; border: 1px solid #344258; border-radius: 9px;
+                          color: #f2f5f8; padding: 16px; text-align: left; font-size: 14px; }
+            QPushButton:hover { background: #2a3850; border-color: #f6c453; }
+            QPushButton#primary { background: #f6c453; color: #16191f; font-weight: 700; }
+            QPushButton#primary:hover { background: #ffd878; }
+            """
+        )
 
-        for label, action in buttons:
-            btn = QPushButton(label)
-            btn.setFont(btn_font)
-            btn.setMinimumHeight(40)
-            btn.clicked.connect(self._make_handler(action))
-            layout.addWidget(btn)
+    def _build_home_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(12)
+        title = QLabel("Your offline chess studio")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        subtitle = QLabel("Choose a workspace. Every feature opens inside this window.")
+        subtitle.setObjectName("pageDescription")
+        layout.addWidget(subtitle)
 
-        self.setLayout(layout)
+        grid = QGridLayout()
+        grid.setSpacing(12)
+        for index, (label, action, description) in enumerate(self._FEATURES):
+            button = QPushButton(f"{label}\n{description}")
+            button.setMinimumHeight(78)
+            button.clicked.connect(self._make_handler(action))
+            grid.addWidget(button, index // 2, index % 2)
+        layout.addLayout(grid)
 
-    def _make_handler(self, action: str):
+        exit_button = QPushButton("EXIT KNIGHTBOARD")
+        exit_button.setObjectName("primary")
+        exit_button.clicked.connect(self.close)
+        layout.addWidget(exit_button)
+        return page
+
+    def _build_feature_page(self, action):
+        labels = dict((item[1], (item[0], item[2])) for item in self._FEATURES)
+        title_text, description = labels[action]
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(14)
+        back = QPushButton("←  Back to main menu")
+        back.setObjectName("primary")
+        back.setMaximumWidth(210)
+        back.clicked.connect(lambda: self._show_page("home"))
+        layout.addWidget(back, 0, Qt.AlignLeft)
+
+        title = QLabel(title_text)
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        intro = QLabel(description)
+        intro.setObjectName("pageDescription")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        status = QLabel("This workspace is ready. Your controls will stay in this window.")
+        status.setObjectName("muted")
+        status.setWordWrap(True)
+        card_layout.addWidget(status)
+        action_button = QPushButton("OPEN WORKSPACE")
+        action_button.setObjectName("primary")
+        action_button.clicked.connect(lambda: self.action_selected.emit(action))
+        card_layout.addWidget(action_button)
+        layout.addWidget(card)
+        layout.addStretch()
+        return page
+
+    def _make_handler(self, action):
         @Slot()
         def handler():
-            # Emit the selected action; the main program will decide what to do.
-            self.action_selected.emit(action)
-
+            if action == "exit":
+                self.close()
+            else:
+                self._show_page(action)
         return handler
 
+    def _show_page(self, action):
+        if action not in self._pages:
+            self._pages[action] = self._build_feature_page(action)
+            self._stack.addWidget(self._pages[action])
+        self._stack.setCurrentWidget(self._pages[action])
+
     def run(self):
-        \"\"\"Start the Qt event loop.\n\n        The function blocks until the window is closed.  It returns the
-        last selected action (or ``\"exit\"`` if the window was closed without a
-        selection).\"\"\"
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication(sys.argv)
-
-        # Store the result in a mutable container.
-        result = {"action": "exit"}
-
-        @Slot(str)
-        def capture(action):
-            result["action"] = action
-            # Close the window after a selection so the caller can continue.
-            self.close()
-
-        self.action_selected.connect(capture)
+        """Run until the user exits; menu navigation never closes the window."""
+        app = QApplication.instance() or QApplication(sys.argv)
         self.show()
-        app.exec_()
-        return result["action"]
+        exec_method = getattr(app, "exec", None) or app.exec_
+        exec_method()
+        return "exit"
 
 
 def main():
-    \"\"\"Convenient entry point for ``python -m chess_camera_app.ui.qt_ui``.\"\"\"
-    qt_app = QtApp()
-    selected = qt_app.run()
-    # For demonstration we simply print the selected action.
-    print(f\"Selected action: {selected}\")
+    QtApp().run()
 
 
-if __name__ == \"__main__\":
+if __name__ == "__main__":
     main()
