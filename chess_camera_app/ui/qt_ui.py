@@ -60,6 +60,13 @@ class QtApp(QWidget):
     )
 
     def __init__(self):
+        # QWidget must never be constructed before QApplication.  The old
+        # launcher created ``QtApp()`` first, which caused Qt to terminate
+        # immediately on some platforms and looked like a tiny window flash.
+        if QApplication.instance() is None:
+            self._app = QApplication(sys.argv)
+        else:
+            self._app = QApplication.instance()
         super().__init__()
         self.setWindowTitle("Knightboard")
         self.setMinimumSize(800, 600)
@@ -184,7 +191,7 @@ class QtApp(QWidget):
 
     def run(self):
         """Run until the user exits; menu navigation never closes the window."""
-        app = QApplication.instance() or QApplication(sys.argv)
+        app = self._app or QApplication.instance() or QApplication(sys.argv)
         self.show()
         exec_method = getattr(app, "exec", None) or app.exec_
         exec_method()
@@ -197,3 +204,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
