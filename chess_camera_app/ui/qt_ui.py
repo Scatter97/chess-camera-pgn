@@ -15,6 +15,7 @@ try:
         QGridLayout,
         QHBoxLayout,
         QLabel,
+        QLineEdit,
         QListWidget,
         QPushButton,
         QStackedWidget,
@@ -31,6 +32,7 @@ except ImportError:
             QGridLayout,
             QHBoxLayout,
             QLabel,
+            QLineEdit,
             QListWidget,
             QPushButton,
             QStackedWidget,
@@ -143,6 +145,8 @@ class QtApp(QWidget):
     def _build_feature_page(self, action):
         if action == "chess960":
             return self._build_chess960_page()
+        if action == "endgame":
+            return self._build_endgame_page()
 
         labels = dict((item[1], (item[0], item[2])) for item in self._FEATURES)
         title_text, description = labels[action]
@@ -251,6 +255,71 @@ class QtApp(QWidget):
         card_layout.addWidget(board_view)
         card_layout.addWidget(fen)
         card_layout.addWidget(generate)
+        layout.addWidget(card)
+        layout.addStretch()
+        return page
+
+    def _build_endgame_page(self):
+        """Native Qt endgame position viewer with editable FEN input."""
+        import chess
+        from chess_camera_app.analysis.endgame_explorer import DEFAULT_ENDGAME_FEN
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        back = QPushButton("←  Back to main menu")
+        back.setObjectName("primary")
+        back.setMaximumWidth(210)
+        back.clicked.connect(lambda: self._show_page("home"))
+        layout.addWidget(back, 0, Qt.AlignLeft)
+        title = QLabel("ENDGAME EXPLORER")
+        title.setObjectName("pageTitle")
+        layout.addWidget(title)
+        description = QLabel("Set up an offline endgame position with FEN. Tablebase controls will use your local Syzygy files.")
+        description.setObjectName("pageDescription")
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(24, 24, 24, 24)
+        fen_input = QLineEdit(DEFAULT_ENDGAME_FEN)
+        fen_input.setPlaceholderText("Paste a legal FEN position")
+        board_view = QLabel()
+        board_view.setFont(QFont("Consolas", 18))
+        board_view.setAlignment(Qt.AlignCenter)
+        board_view.setStyleSheet("background: #0d1118; border: 1px solid #344258; padding: 16px;")
+        status = QLabel()
+        status.setObjectName("muted")
+        load = QPushButton("LOAD POSITION")
+        load.setObjectName("primary")
+
+        def render_board():
+            try:
+                board = chess.Board(fen_input.text().strip())
+                if not board.is_valid():
+                    raise ValueError("Position is not legal")
+            except ValueError as error:
+                status.setText(f"Could not load FEN: {error}")
+                return
+            symbols = {"r": "♜", "n": "♞", "b": "♝", "q": "♛", "k": "♚", "p": "♟",
+                       "R": "♖", "N": "♘", "B": "♗", "Q": "♕", "K": "♔", "P": "♙"}
+            rows = []
+            for rank in range(7, -1, -1):
+                rows.append(f"{rank + 1}  " + "  ".join(
+                    symbols.get(piece.symbol(), "·") if (piece := board.piece_at(rank * 8 + file_index)) else "·"
+                    for file_index in range(8)
+                ))
+            rows.append("   a  b  c  d  e  f  g  h")
+            board_view.setText("\n".join(rows))
+            status.setText(f"{len(board.piece_map())} pieces • {'White' if board.turn else 'Black'} to move")
+
+        load.clicked.connect(render_board)
+        render_board()
+        card_layout.addWidget(fen_input)
+        card_layout.addWidget(load)
+        card_layout.addWidget(board_view)
+        card_layout.addWidget(status)
         layout.addWidget(card)
         layout.addStretch()
         return page
