@@ -15,6 +15,7 @@ try:
         QGridLayout,
         QHBoxLayout,
         QLabel,
+        QListWidget,
         QPushButton,
         QStackedWidget,
         QVBoxLayout,
@@ -30,6 +31,7 @@ except ImportError:
             QGridLayout,
             QHBoxLayout,
             QLabel,
+            QListWidget,
             QPushButton,
             QStackedWidget,
             QVBoxLayout,
@@ -167,6 +169,23 @@ class QtApp(QWidget):
         status.setObjectName("muted")
         status.setWordWrap(True)
         card_layout.addWidget(status)
+        if action == "history":
+            games = QListWidget()
+            games.setMinimumHeight(180)
+            try:
+                from chess_camera_app.ui.ui_support import load_history
+                entries = load_history()
+            except Exception:
+                entries = []
+            if entries:
+                for game in entries:
+                    games.addItem(
+                        f"{game.white}  vs  {game.black}   •   {game.result}   •   "
+                        f"{game.moves} moves   •   {game.date}"
+                    )
+            else:
+                games.addItem("No saved games yet. Record a game to see it here.")
+            card_layout.addWidget(games)
         action_button = QPushButton("OPEN WORKSPACE")
         action_button.setObjectName("primary")
         action_button.clicked.connect(lambda: self._open_workspace(action))
