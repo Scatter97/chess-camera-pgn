@@ -61,7 +61,7 @@ class QtApp(QWidget):
         ("OTB BOT GAME", "otb_bot", "Record an OTB game while Knightboard assists."),
     )
 
-    def __init__(self):
+    def __init__(self, action_handler=None):
         # QWidget must never be constructed before QApplication.  The old
         # launcher created ``QtApp()`` first, which caused Qt to terminate
         # immediately on some platforms and looked like a tiny window flash.
@@ -70,6 +70,7 @@ class QtApp(QWidget):
         else:
             self._app = QApplication.instance()
         super().__init__()
+        self._action_handler = action_handler
         self.setWindowTitle("Knightboard")
         self.setMinimumSize(800, 600)
         self.resize(980, 700)
@@ -194,6 +195,12 @@ class QtApp(QWidget):
         def handler():
             if action == "exit":
                 self.close()
+            elif self._action_handler is not None:
+                self.hide()
+                try:
+                    self._action_handler(action)
+                finally:
+                    self.show()
             else:
                 self._show_page(action)
         return handler
