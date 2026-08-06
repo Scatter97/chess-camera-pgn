@@ -12,6 +12,12 @@ from chess_camera_app.analysis import chess960_generator
 from chess_camera_app.content import content_manager_ui
 from chess_camera_app.analysis import endgame_explorer
 from chess_camera_app.ui import feature_settings
+# Try to import the new Qt based UI. If unavailable we fall back to the original OpenCV UI.
+try:
+    from chess_camera_app.ui.qt_ui import QtApp
+    _HAS_QT_UI = True
+except Exception:  # pragma: no cover
+    _HAS_QT_UI = False
 from chess_camera_app.ui import game_history
 from chess_camera_app.game import game_session
 from chess_camera_app.game import bot_games
@@ -210,8 +216,24 @@ def main() -> None:
     multi_move_settings.install(feature_settings, app)
     content_manager_ui.install(app, navigation)
 
-    while True:
+    # ------------------------------------------------------------
+    # UI selection – Qt preferred, OpenCV fallback
+    # ------------------------------------------------------------
+    if _HAS_QT_UI:
+        # QtApp already knows how to launch the selected screen.
+        # It will call the appropriate explorer / game logic internally,
+        # so we simply start it and then exit the main loop.
+        QtApp().run()
+        # No further processing is needed – the Qt UI handles the
+        # action and returns when the user quits the Qt app.
+        return
+    else:
+        # Fallback to the original OpenCV UI.
         action = home_screen()
+
+        # --------------------------------------------------------
+        # Legacy OpenCV‑based action mapping (unchanged)
+        # --------------------------------------------------------
         if action == "history":
             game_history.show_game_history()
         elif action == "chess960":

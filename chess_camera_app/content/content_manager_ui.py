@@ -535,7 +535,10 @@ def install(app_module: ModuleType, navigation_module: ModuleType) -> None:
     def settings_with_content() -> None:
         window = "Chess Camera - Settings and Libraries"
         cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(window, 780, 470)
+        try:
+            cv2.resizeWindow(window, 780, 470)
+        except cv2.error:
+            pass
         queue: list[str] = []
         buttons = [
             Button("app_settings", "APP SETTINGS", 85, 135, 610, 70),
